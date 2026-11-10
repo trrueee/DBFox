@@ -211,7 +211,7 @@ export function ArtifactDockContent({
         }}
         openArtifact={(value) => {
             const canonical = useConversationStore.getState().artifactsById[value.id];
-            if (canonical) openArtifactDock(canonical);
+            openArtifactDock(canonical ?? value);
         }}
       />
     </WorkspaceShell>

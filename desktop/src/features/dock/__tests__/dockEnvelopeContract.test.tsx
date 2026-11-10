@@ -196,7 +196,7 @@ describe("P6: Canonical Dock Envelope & Capability Neutrality", () => {
 
       expect(viewTypes).toContain("core.artifacts");
       expect(viewTypes).toContain("core.artifact");
-      expect(viewTypes).toEqual(["core.project-workbench", "core.artifacts", "core.artifact"]);
+      expect(viewTypes).toEqual(["core.local-execution", "core.project-workbench", "core.artifacts", "core.artifact"]);
     });
 
     it("fails closed deterministically on duplicate viewType registration", () => {

@@ -1,0 +1,31 @@
+.local-model-facts {
+  display: grid;
+  margin: 0;
+}
+
+.local-model-facts > div {
+  display: grid;
+  grid-template-columns: 6em minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3) 0;
+}
+
+.local-model-facts > div + div {
+  border-top: 1px solid var(--hairline);
+}
+
+.local-model-facts dt,
+.local-model-status {
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-control);
+}
+
+.local-model-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.local-model-status {
+  margin: var(--space-3) 0 0;
+}

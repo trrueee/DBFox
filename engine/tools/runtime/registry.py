@@ -59,6 +59,7 @@ class ToolRegistry:
         self._keys_by_wire_name: dict[str, ToolKey] = {}
         self._keys_by_object_id: dict[int, ToolKey] = {}
         self._package_digests: dict[ToolKey, str] = {}
+        self._host_supervised_processes: set[ToolKey] = set()
         self._frozen = False
         self._available_backends = available_backends or frozenset({"in_process"})
 
@@ -73,6 +74,7 @@ class ToolRegistry:
         owner: str | None = None,
         package_digest: str | None = None,
         provider_name: str | None = None,
+        host_supervised_process: bool = False,
     ) -> "ToolRegistry":
         if self._frozen:
             raise RuntimeError("Tool Registry is frozen; registration is rejected.")
@@ -94,14 +96,19 @@ class ToolRegistry:
             raise ValueError(
                 f"Provider Tool name {wire_name!r} for {key!r} conflicts with {conflicting_key!r}."
             )
-        self._validate_execution_boundary(tool)
+        self._validate_execution_boundary(tool, host_supervised_process)
         self._tools[key] = tool
         self._wire_names[key] = wire_name
         self._keys_by_wire_name[wire_name] = key
         self._keys_by_object_id[id(tool)] = key
         if package_digest is not None:
             self._package_digests[key] = package_digest
+        if host_supervised_process:
+            self._host_supervised_processes.add(key)
         return self
+
+    def host_supervises_process(self, name: str) -> bool:
+        return self._keys_by_wire_name.get(name) in self._host_supervised_processes
 
     def freeze(self) -> "ToolRegistry":
         self._frozen = True
@@ -186,7 +193,7 @@ class ToolRegistry:
     def __contains__(self, name: str) -> bool:
         return name in self._keys_by_wire_name
 
-    def _validate_execution_boundary(self, tool: RegisteredFunction) -> None:
+    def _validate_execution_boundary(self, tool: RegisteredFunction, host_supervised_process: bool) -> None:
         execution = tool.execution
         capabilities = set(execution.capabilities)
         if execution.backend not in self._available_backends:
@@ -194,8 +201,16 @@ class ToolRegistry:
                 f"Tool '{tool.name}' requires unavailable execution backend "
                 f"'{execution.backend}'."
             )
-        if execution.backend == "in_process" and not capabilities <= IN_PROCESS_CAPABILITIES:
-            forbidden = ", ".join(sorted(capabilities - IN_PROCESS_CAPABILITIES))
+        permitted = IN_PROCESS_CAPABILITIES
+        if host_supervised_process:
+            if not (
+                execution.backend == "in_process" and "subprocess" in capabilities
+                and tool.policy.requires_admission and tool.policy.requires_approval
+            ):
+                raise ValueError("Host-supervised processes require an admitted, approval-bound Tool")
+            permitted = permitted | {"subprocess"}
+        if execution.backend == "in_process" and not capabilities <= permitted:
+            forbidden = ", ".join(sorted(capabilities - permitted))
             raise ValueError(
                 f"Tool '{tool.name}' requests capabilities that require an isolated process: {forbidden}"
             )

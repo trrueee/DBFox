@@ -1,11 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LlmConfigPanel } from "../LlmConfigPanel";
 import { ApiError } from "../../lib/api/client";
 import { DEFAULT_LLM_API_BASE } from "../../lib/llmProviders";
 import { ModelSettingsPanel } from "../../features/settings/ModelSettingsPanel";
 import { testDraftLlmConnection } from "../../features/appShell/llmDraftConnection";
+import { localModelQuery, testLocalModel } from "../../lib/api/localModel";
 
 vi.mock("../../features/appShell/llmDraftConnection", () => ({
   listDraftLlmModels: vi.fn().mockResolvedValue({ ok: true, models: ["deepseek-chat", "deepseek-reasoner"] }),
@@ -19,6 +21,16 @@ vi.mock("../../hooks/useApiConfig", () => ({
   }),
 }));
 
+vi.mock("../../lib/api/localModel", () => ({
+  localModelQuery: { queryKey: ["local-model"], queryFn: vi.fn().mockResolvedValue({ mode: "remote" }) },
+  testLocalModel: vi.fn(),
+}));
+
+function renderModelSettings() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ModelSettingsPanel showToast={vi.fn()} /></QueryClientProvider>);
+}
+
 describe("LlmConfigPanel", () => {
   afterEach(() => cleanup());
 
@@ -28,10 +40,23 @@ describe("LlmConfigPanel", () => {
       ok: false, model: "test-model", api_base: DEFAULT_LLM_API_BASE, latency_ms: 1,
       error_code: "MODEL_PROVIDER_QUOTA_EXCEEDED", error_message: message,
     });
-    render(<ModelSettingsPanel showToast={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
+    renderModelSettings();
+    fireEvent.click(await screen.findByRole("button", { name: "测试连接" }));
     expect(await screen.findByText(message)).toBeTruthy();
     expect(screen.queryByText("请检查凭据、端点和模型名称。")).toBeNull();
+  });
+
+  it("shows the installed model and tests local inference through settings", async () => {
+    vi.mocked(localModelQuery.queryFn as NonNullable<typeof localModelQuery.queryFn>).mockResolvedValueOnce({
+      mode: "local", model: "qwen3.5:4b-q4_K_M", models_dir: "E:\\DBFoxLocalModel\\models",
+      model_size_bytes: 3_300_000_000, context_length: 16384,
+    });
+    vi.mocked(testLocalModel).mockResolvedValueOnce({ ok: true, latency_ms: 2300 });
+    renderModelSettings();
+    expect(await screen.findByText("qwen3.5:4b-q4_K_M")).toBeInTheDocument();
+    expect(screen.queryByLabelText("API Base URL")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "测试推理" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("推理通过 · 2.3 秒");
   });
 
   it("renders one focused settings flow without duplicate summaries", () => {

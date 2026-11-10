@@ -18,6 +18,7 @@ class WorkspaceBinding(Contract):
     project_id: str
     root_path: str
     root_digest: str
+    binding_generation: str
     created_at: str
     updated_at: str
 
@@ -34,12 +35,16 @@ class DeleteBindingOutput(Contract):
     deleted: bool
 
 
+_FILE_PATH = "Path relative to the bound project root, such as src/main.py. Reuse a path returned by project search."
+_DIRECTORY_PATH = "Directory relative to the bound project root. Leave empty or use . for that root."
+
+
 class PathInput(Contract):
-    path: str = Field(default="", max_length=1024)
+    path: str = Field(default="", max_length=1024, description=_DIRECTORY_PATH)
 
 
 class FileReadInput(Contract):
-    path: str = Field(min_length=1, max_length=1024)
+    path: str = Field(min_length=1, max_length=1024, description=_FILE_PATH)
     offset: int = Field(default=0, ge=0, le=1_048_576)
     limit: int = Field(default=12_000, ge=1, le=12_000)
 
@@ -67,7 +72,7 @@ class FileReadOutput(Contract):
 
 class FileSearchInput(Contract):
     query: str = Field(default="", max_length=200, description="Literal case-insensitive name/path substring for recursive search; empty lists immediate children of path_prefix.")
-    path_prefix: str = Field(default="", max_length=1024)
+    path_prefix: str = Field(default="", max_length=1024, description=_DIRECTORY_PATH)
     limit: int = Field(default=20, ge=1, le=100)
 
 
@@ -80,7 +85,7 @@ class FileSearchOutput(Contract):
 
 
 class FileWriteInput(Contract):
-    path: str = Field(min_length=1, max_length=1024)
+    path: str = Field(min_length=1, max_length=1024, description=_FILE_PATH)
     content: str = Field(max_length=1_048_576)
     expected_sha256: str | None = Field(
         default=None, min_length=64, max_length=64,
@@ -89,7 +94,7 @@ class FileWriteInput(Contract):
 
 
 class FileEditInput(Contract):
-    path: str = Field(min_length=1, max_length=1024)
+    path: str = Field(min_length=1, max_length=1024, description=_FILE_PATH)
     old_string: str = Field(min_length=1, max_length=200_000)
     new_string: str = Field(max_length=200_000)
     expected_sha256: str = Field(min_length=64, max_length=64)
@@ -104,7 +109,7 @@ class FileMutationOutput(Contract):
 
 
 class FileDeleteInput(Contract):
-    path: str = Field(min_length=1, max_length=1024)
+    path: str = Field(min_length=1, max_length=1024, description="File or empty directory relative to the bound project root.")
 
 
 class FileDeleteOutput(Contract):
@@ -113,8 +118,8 @@ class FileDeleteOutput(Contract):
 
 
 class FileMoveInput(Contract):
-    source_path: str = Field(min_length=1, max_length=1024)
-    destination_path: str = Field(min_length=1, max_length=1024)
+    source_path: str = Field(min_length=1, max_length=1024, description="Existing file or directory relative to the bound project root.")
+    destination_path: str = Field(min_length=1, max_length=1024, description="New path relative to the same bound project root.")
 
 
 class FileMoveOutput(Contract):
@@ -125,7 +130,10 @@ class FileMoveOutput(Contract):
 
 class FileGrepInput(Contract):
     query: str = Field(min_length=1, max_length=200)
-    path_prefix: str = Field(default="", max_length=1024)
+    path_prefix: str = Field(
+        default="", max_length=1024,
+        description="File or directory relative to the bound project root. Leave empty or use . to search the project.",
+    )
     limit: int = Field(default=50, ge=1, le=100)
 
 
@@ -147,7 +155,7 @@ CommandArgument = Annotated[str, Field(min_length=1, max_length=4096)]
 
 class CommandRunInput(Contract):
     argv: tuple[CommandArgument, ...] = Field(min_length=1, max_length=128)
-    cwd: str = Field(default="", max_length=1024)
+    cwd: str = Field(default="", max_length=1024, description=_DIRECTORY_PATH)
     timeout_seconds: int = Field(default=60, ge=1, le=300)
 
     @model_validator(mode="after")

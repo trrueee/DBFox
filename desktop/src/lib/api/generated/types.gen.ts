@@ -651,7 +651,7 @@ export type ConversationInputRequest = {
     /**
      * Llm Credential Id
      */
-    llm_credential_id: string;
+    llm_credential_id?: string | null;
     /**
      * Model Name
      */
@@ -1517,6 +1517,111 @@ export type FunctionCallPayload = {
 };
 
 /**
+ * JobPage
+ */
+export type JobPage = {
+    /**
+     * Chunks
+     */
+    chunks: Array<LogLine>;
+    /**
+     * Cursor Expired
+     */
+    cursor_expired: boolean;
+    /**
+     * Has More
+     */
+    has_more: boolean;
+    job: JobView;
+    /**
+     * Next Cursor
+     */
+    next_cursor: number;
+};
+
+/**
+ * JobView
+ */
+export type JobView = {
+    /**
+     * Active Processes
+     */
+    active_processes: number | null;
+    /**
+     * Argv
+     */
+    argv: Array<string>;
+    /**
+     * Cwd
+     */
+    cwd: string;
+    /**
+     * Duration Ms
+     */
+    duration_ms: number;
+    /**
+     * Executable
+     */
+    executable: string;
+    /**
+     * First Cursor
+     */
+    first_cursor: number;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Interactive
+     */
+    interactive: boolean;
+    /**
+     * Last Cursor
+     */
+    last_cursor: number;
+    /**
+     * Lifetime
+     */
+    lifetime: 'foreground' | 'background';
+    /**
+     * Output Finalized
+     */
+    output_finalized: boolean;
+    /**
+     * Reason
+     */
+    reason: string | null;
+    /**
+     * Retained Bytes
+     */
+    retained_bytes: number;
+    /**
+     * Root Exit Code
+     */
+    root_exit_code: number | null;
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Shell Script
+     */
+    shell_script: string | null;
+    /**
+     * State
+     */
+    state: 'starting' | 'running' | 'stopping' | 'exited' | 'start_failed' | 'cancelled' | 'timed_out' | 'interrupted' | 'unknown';
+    /**
+     * Stdin Open
+     */
+    stdin_open: boolean;
+    /**
+     * Timeout Seconds
+     */
+    timeout_seconds: number;
+};
+
+/**
  * LlmModelOption
  */
 export type LlmModelOption = {
@@ -1616,6 +1721,80 @@ export type LlmTestResponse = {
      * Ok
      */
     ok: boolean;
+};
+
+/**
+ * LocalModelStatus
+ */
+export type LocalModelStatus = {
+    /**
+     * Context Length
+     */
+    context_length?: number | null;
+    /**
+     * Error Code
+     */
+    error_code?: string | null;
+    /**
+     * Error Message
+     */
+    error_message?: string | null;
+    /**
+     * Mode
+     */
+    mode: 'local' | 'remote';
+    /**
+     * Model
+     */
+    model?: string | null;
+    /**
+     * Model Size Bytes
+     */
+    model_size_bytes?: number | null;
+    /**
+     * Models Dir
+     */
+    models_dir?: string | null;
+};
+
+/**
+ * LocalModelTestResponse
+ */
+export type LocalModelTestResponse = {
+    /**
+     * Error Code
+     */
+    error_code?: string | null;
+    /**
+     * Error Message
+     */
+    error_message?: string | null;
+    /**
+     * Latency Ms
+     */
+    latency_ms: number;
+    /**
+     * Ok
+     */
+    ok: boolean;
+};
+
+/**
+ * LogLine
+ */
+export type LogLine = {
+    /**
+     * Cursor
+     */
+    cursor: number;
+    /**
+     * Stream
+     */
+    stream: 'stdout' | 'stderr';
+    /**
+     * Text
+     */
+    text: string;
 };
 
 /**
@@ -2681,6 +2860,112 @@ export type ApiLlmTestApiV1AgentLlmTestPostResponses = {
 
 export type ApiLlmTestApiV1AgentLlmTestPostResponse = ApiLlmTestApiV1AgentLlmTestPostResponses[keyof ApiLlmTestApiV1AgentLlmTestPostResponses];
 
+export type ApiLocalModelStatusApiV1AgentLocalModelGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/agent/local-model';
+};
+
+export type ApiLocalModelStatusApiV1AgentLocalModelGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ApiLocalModelStatusApiV1AgentLocalModelGetError = ApiLocalModelStatusApiV1AgentLocalModelGetErrors[keyof ApiLocalModelStatusApiV1AgentLocalModelGetErrors];
+
+export type ApiLocalModelStatusApiV1AgentLocalModelGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: LocalModelStatus;
+};
+
+export type ApiLocalModelStatusApiV1AgentLocalModelGetResponse = ApiLocalModelStatusApiV1AgentLocalModelGetResponses[keyof ApiLocalModelStatusApiV1AgentLocalModelGetResponses];
+
+export type ApiLocalModelTestApiV1AgentLocalModelTestPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/agent/local-model/test';
+};
+
+export type ApiLocalModelTestApiV1AgentLocalModelTestPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ApiLocalModelTestApiV1AgentLocalModelTestPostError = ApiLocalModelTestApiV1AgentLocalModelTestPostErrors[keyof ApiLocalModelTestApiV1AgentLocalModelTestPostErrors];
+
+export type ApiLocalModelTestApiV1AgentLocalModelTestPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: LocalModelTestResponse;
+};
+
+export type ApiLocalModelTestApiV1AgentLocalModelTestPostResponse = ApiLocalModelTestApiV1AgentLocalModelTestPostResponses[keyof ApiLocalModelTestApiV1AgentLocalModelTestPostResponses];
+
 export type ResolveApprovalApiV1ApprovalsApprovalIdResolvePostData = {
     body: ApprovalResolutionRequest;
     path: {
@@ -3415,6 +3700,201 @@ export type ListConversationEventsApiV1ConversationsConversationIdEventsGetRespo
 };
 
 export type ListConversationEventsApiV1ConversationsConversationIdEventsGetResponse = ListConversationEventsApiV1ConversationsConversationIdEventsGetResponses[keyof ListConversationEventsApiV1ConversationsConversationIdEventsGetResponses];
+
+export type ListExecutionJobsApiV1ConversationsConversationIdExecutionJobsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{conversation_id}/execution-jobs';
+};
+
+export type ListExecutionJobsApiV1ConversationsConversationIdExecutionJobsGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ListExecutionJobsApiV1ConversationsConversationIdExecutionJobsGetError = ListExecutionJobsApiV1ConversationsConversationIdExecutionJobsGetErrors[keyof ListExecutionJobsApiV1ConversationsConversationIdExecutionJobsGetErrors];
+
+export type ListExecutionJobsApiV1ConversationsConversationIdExecutionJobsGetResponses = {
+    /**
+     * Response List Execution Jobs Api V1 Conversations  Conversation Id  Execution Jobs Get
+     *
+     * Successful Response
+     */
+    200: Array<JobView>;
+};
+
+export type ListExecutionJobsApiV1ConversationsConversationIdExecutionJobsGetResponse = ListExecutionJobsApiV1ConversationsConversationIdExecutionJobsGetResponses[keyof ListExecutionJobsApiV1ConversationsConversationIdExecutionJobsGetResponses];
+
+export type ReadExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: {
+        /**
+         * After
+         */
+        after?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Tail
+         */
+        tail?: boolean;
+    };
+    url: '/api/v1/conversations/{conversation_id}/execution-jobs/{job_id}';
+};
+
+export type ReadExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ReadExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdGetError = ReadExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdGetErrors[keyof ReadExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdGetErrors];
+
+export type ReadExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: JobPage;
+};
+
+export type ReadExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdGetResponse = ReadExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdGetResponses[keyof ReadExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdGetResponses];
+
+export type StopExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdStopPostData = {
+    body?: never;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{conversation_id}/execution-jobs/{job_id}/stop';
+};
+
+export type StopExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdStopPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type StopExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdStopPostError = StopExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdStopPostErrors[keyof StopExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdStopPostErrors];
+
+export type StopExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdStopPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: unknown;
+};
 
 export type GetConversationHistoryApiV1ConversationsConversationIdHistoryGetData = {
     body?: never;

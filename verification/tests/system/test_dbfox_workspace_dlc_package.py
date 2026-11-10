@@ -121,33 +121,39 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
     ))
     resources = snapshot.resource_providers[0](None, "project-a")
     assert [(item.kind, item.id, item.version) for item in resources] == [
-        ("dbfox.workspace.root", "project-a", binding.root_digest)
+        ("dbfox.workspace.root", "project-a", binding.binding_generation)
     ]
     resolved = snapshot.resource_resolvers[0].resolver(ResourceScopeRef(
         kind="dbfox.workspace.root",
         id="project-a",
-        version=binding.root_digest,
+        version=binding.binding_generation,
     ))
     assert resolved.read_text_file("notes.txt").content == "hello workspace"
 
     listing = snapshot.get_operation("dbfox.workspace", "files.list")
     assert listing is not None
+    listing_context = DlcOperationContext(
+        dlc_id="dbfox.workspace",
+        operation_name="files.list",
+        project_id="project-a",
+    )
     output = listing.spec.output_model.model_validate(listing.spec.handler(
         listing.spec.input_model(path=""),
-        DlcOperationContext(
-            dlc_id="dbfox.workspace",
-            operation_name="files.list",
-            project_id="project-a",
-        ),
+        listing_context,
     ))
+    assert output.path == "."
     assert [(entry.name, entry.is_dir) for entry in output.entries] == [
         ("notes.txt", False)
     ]
+    with pytest.raises(DlcOperationError, match="relative to the bound project") as error:
+        listing.spec.handler(listing.spec.input_model(path=str(workspace)), listing_context)
+    assert error.value.code == "WORKSPACE_INVALID"
+    assert str(workspace) not in str(error.value)
 
     scope = ResourceScopeRef(
         kind="dbfox.workspace.root",
         id="project-a",
-        version=binding.root_digest,
+        version=binding.binding_generation,
     )
 
     with pytest.raises(ValueError, match="must not contain"):
@@ -349,7 +355,8 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
         tools=materialize_tools(registry, execution_mode="analysis", available_resource_kinds={scope.kind}),
         registry=registry,
     )
-    assert [(item.owner_id, item.id, item.version) for item in guidance] == [("dbfox.workspace", "workspace_evidence", "1")]
+    assert [(item.owner_id, item.id, item.version) for item in guidance] == [("dbfox.workspace", "workspace_evidence", "2")]
+    assert "bound project folder is the root" in guidance[0].prompt_section()
     assert {local for local, _wire in guidance[0].tool_names} == {
         "file_search", "file_read", "file_write", "file_edit", "file_grep", "command_run",
     }

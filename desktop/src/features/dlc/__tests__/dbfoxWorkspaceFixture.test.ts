@@ -49,7 +49,7 @@ describe("dbfox.workspace System DLC frontend fixture", () => {
     await renderFileFixture("binding-retry", async (name) => {
       if (name === "binding.get") {
         if (++attempts === 1) throw new Error("服务暂时不可用");
-        return { binding: { id: "root-1", root_digest: "digest", root_path: "D:/workspace" } };
+        return { binding: { id: "root-1", binding_generation: "digest", root_path: "D:/workspace" } };
       }
       if (name === "files.list") return { entries: [], truncated: false };
       if (name === "files.read") return { content: "已恢复读取", content_truncated: false, sha256: "a".repeat(64) };
@@ -66,7 +66,7 @@ describe("dbfox.workspace System DLC frontend fixture", () => {
     let content = "旧版内容";
     let directoryReads = 0;
     const open = await renderFileFixture("refresh", async (name) => {
-      if (name === "binding.get") return { binding: { id: "root-1", root_digest: "digest", root_path: "D:/workspace" } };
+      if (name === "binding.get") return { binding: { id: "root-1", binding_generation: "digest", root_path: "D:/workspace" } };
       if (name === "files.list") { directoryReads++; return { entries: [], truncated: false }; }
       if (name === "files.read") return { content, content_truncated: false, sha256: "a".repeat(64) };
       throw new Error(`Unexpected operation: ${name}`);
@@ -87,7 +87,7 @@ describe("dbfox.workspace System DLC frontend fixture", () => {
     let fresh = false;
     const reads: unknown[] = [];
     await renderFileFixture("pagination-conflict", async (name, input) => {
-      if (name === "binding.get") return { binding: { id: "root-1", root_digest: "digest", root_path: "D:/workspace" } };
+      if (name === "binding.get") return { binding: { id: "root-1", binding_generation: "digest", root_path: "D:/workspace" } };
       if (name === "files.list") return { entries: [], truncated: false };
       if (name === "files.read") {
         reads.push(input);
@@ -113,7 +113,7 @@ describe("dbfox.workspace System DLC frontend fixture", () => {
     let fresh = false;
     let resolvePage!: (value: unknown) => void;
     await renderFileFixture("late-pagination", async (name, input) => {
-      if (name === "binding.get") return { binding: { id: "root-1", root_digest: "digest", root_path: "D:/workspace" } };
+      if (name === "binding.get") return { binding: { id: "root-1", binding_generation: "digest", root_path: "D:/workspace" } };
       if (name === "files.list") return { entries: [], truncated: false };
       if (name === "files.read") {
         if ((input as { offset?: number }).offset) return new Promise(resolve => { resolvePage = resolve; });
@@ -135,7 +135,7 @@ describe("dbfox.workspace System DLC frontend fixture", () => {
   it("reads each canonical file target without a second file identity cache", async () => {
     const opened: string[] = [];
     const open = await renderFileFixture("canonical-target", async (name, input) => {
-      if (name === "binding.get") return { binding: { id: "root-1", root_digest: "digest", root_path: "D:/workspace" } };
+      if (name === "binding.get") return { binding: { id: "root-1", binding_generation: "digest", root_path: "D:/workspace" } };
       if (name === "files.list") return { entries: [], truncated: false };
       if (name === "files.read") {
         const path = (input as { path: string }).path;
@@ -180,7 +180,7 @@ describe("dbfox.workspace System DLC frontend fixture", () => {
     const source = await readFile(fixturePath, "utf8");
     const module = await import(/* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(source).toString("base64")}#unicode`) as DlcModule;
     const reads: unknown[] = [];
-    const binding = { id: "root-1", root_digest: "digest", root_path: "D:/workspace" };
+    const binding = { id: "root-1", binding_generation: "digest", root_path: "D:/workspace" };
     const staged = createStagedExtensionHost("dbfox.workspace", {
       openDockTab: vi.fn(),
       invokeOperation: async <T,>(_owner: string, name: string, input: unknown) => {

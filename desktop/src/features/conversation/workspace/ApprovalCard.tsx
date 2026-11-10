@@ -204,6 +204,41 @@ function ApprovalOutcomeIcon({ outcome }: { outcome: ApprovalOutcome }) {
 
 function ApprovalOperation({ operation, sql, approval }: { operation: string; sql: string; approval: ApprovalItem }) {
   const parameters = approval.payload.requested_action.arguments;
+  const review = approval.payload.requested_action.review;
+  if (review && typeof review === "object" && "executable" in review && typeof review.executable === "string") {
+    const details = review as Record<string, unknown>;
+    const args = parameters && typeof parameters === "object" ? parameters as Record<string, unknown> : {};
+    const command = typeof args.shell_script === "string"
+      ? args.shell_script
+      : Array.isArray(args.argv) ? JSON.stringify(args.argv.slice(1))
+      : typeof args.text === "string" ? JSON.stringify(args.text) : undefined;
+    return <div className="grid gap-2 rounded-md border border-[var(--agent-border)] bg-[var(--agent-surface-muted)] p-2.5 text-xs">
+      <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+        <dt className="text-[var(--agent-text-muted)]">程序</dt>
+        <dd className="m-0 break-all font-[var(--font-family-code)]">{review.executable}</dd>
+        {typeof details.cwd === "string" ? <>
+          <dt className="text-[var(--agent-text-muted)]">目录</dt>
+          <dd className="m-0 break-all font-[var(--font-family-code)]">{details.cwd}</dd>
+        </> : null}
+        {typeof details.mode === "string" ? <>
+          <dt className="text-[var(--agent-text-muted)]">方式</dt>
+          <dd className="m-0">
+            {details.mode === "windows_cmd" ? "Windows cmd " + String(details.shell_flags ?? "") : "直接运行程序"}
+            {details.lifetime === "background" ? " · 允许后台运行" : " · 随当前任务结束"}
+            {typeof details.timeout_seconds === "number" ? " · 最长 " + details.timeout_seconds + " 秒" : ""}
+          </dd>
+        </> : <>
+          <dt className="text-[var(--agent-text-muted)]">操作</dt>
+          <dd className="m-0">{typeof args.text === "string" ? (args.close ? "写入并关闭标准输入" : "写入标准输入") : "停止进程树"}</dd>
+        </>}
+      </dl>
+      {command ? <pre className="m-0 max-h-40 overflow-auto whitespace-pre-wrap break-words font-[var(--font-family-code)]">{command}</pre> : null}
+      {args.env && typeof args.env === "object" && Object.keys(args.env).length ? <details>
+        <summary className="cursor-pointer">环境变量</summary>
+        <pre className="m-0 max-h-40 overflow-auto whitespace-pre-wrap break-words font-[var(--font-family-code)]">{JSON.stringify(args.env, null, 2)}</pre>
+      </details> : null}
+    </div>;
+  }
   const target = parameters && typeof parameters === "object" && "path" in parameters
     && typeof parameters.path === "string" ? parameters.path : undefined;
   const operationIdentity = (

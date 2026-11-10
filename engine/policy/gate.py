@@ -73,12 +73,12 @@ def _rule_unknown_tool(
 
 
 def _rule_capabilities(
-    _gate: PolicyGate, _state: dict, tool_name: str, _args: dict, _mode: str,
+    gate: PolicyGate, _state: dict, tool_name: str, _args: dict, _mode: str,
     tool: Any, _policy: Any,
 ) -> PolicyDecision | None:
     capabilities = set(tool.spec.execution.capabilities)
     permitted = _AGENT_KERNEL_CAPABILITIES
-    if tool.spec.execution.backend == "isolated_process":
+    if tool.spec.execution.backend == "isolated_process" or gate.registry.host_supervises_process(tool_name):
         permitted = permitted | {"subprocess"}
     forbidden = sorted(capabilities - permitted)
     if forbidden:
@@ -198,6 +198,7 @@ def _rule_tool_admission(
             approval={
                 "kind": "tool_admission",
                 "subject_fingerprint": canonical_hash(subject),
+                **({"review": admission.approval_review} if admission.approval_review else {}),
                 "resource_ref": (
                     admission.resource_ref.model_dump(mode="json")
                     if admission.resource_ref is not None

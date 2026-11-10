@@ -66,6 +66,11 @@ def test_materialization_is_filtered_versioned_and_stable() -> None:
     assert first.provider_schemas()[0]["parameters"]["additionalProperties"] is False
     assert first.provider_schemas()[0]["parameters"]["required"] == ["value", "note"]
     assert first.provider_schemas()[0]["strict"] is True
+    declared = first.provider_schemas(declared_inputs=registry)[0]
+    assert declared["parameters"]["required"] == ["value"]
+    assert declared["parameters"]["additionalProperties"] is False
+    assert declared["strict"] is False
+    assert first.provider_schemas()[0]["parameters"]["required"] == ["value", "note"]
 
 
 def test_materialization_can_narrow_a_group_to_an_explicit_completion_set() -> None:

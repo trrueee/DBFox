@@ -158,9 +158,6 @@ def _run_case(
     repetition: int,
     fixture_root: Path,
 ) -> TrialOutcome:
-    from engine.agent.completion import CompletionGate
-    from engine.agent.events import LiveStreamHub
-    from engine.agent.loop import RunLoop
     from engine.agent.repositories.session import SessionRepository
     from engine.agent.resource_refs import RequestedResourceRef
     from engine.models import (
@@ -173,11 +170,7 @@ def _run_case(
     )
     from engine.runtime_composition import (
         authorize_project_resources,
-        build_attempt_resource_resolver,
-        build_default_completion_policy,
-        build_product_tool_registry,
-        default_capability_guidance,
-        default_context_contributors,
+        build_product_run_loop,
     )
 
     project_id = f"composition-{case.case_id}-{repetition}-{uuid4().hex[:8]}"
@@ -271,17 +264,9 @@ def _run_case(
             provider_evidence,
         )
 
-    product_registry = build_product_tool_registry(snapshot)
-    loop = RunLoop(
-        session_factory=session_factory,
-        model_factory=model_factory,
-        registry=product_registry,
-        context_contributors=default_context_contributors(snapshot),
-        capability_guidance=default_capability_guidance(snapshot),
-        completion=CompletionGate(build_default_completion_policy(snapshot)),
-        live_stream=LiveStreamHub(),
-        resource_resolver=build_attempt_resource_resolver(snapshot=snapshot),
-    )
+    loop = build_product_run_loop(session_factory=session_factory, snapshot=snapshot)
+    product_registry = loop.registry
+    loop.model_factory = model_factory
     try:
         loop.execute(lease=lease, run_id=admission.run_id)
     finally:

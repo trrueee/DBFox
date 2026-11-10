@@ -15,6 +15,7 @@ import { useProjectState } from "../../projects/useProjectState";
 import { useSavedApiConfig } from "../../../hooks/useSavedApiConfig";
 import { saveStoredApiConfig } from "../../../lib/llmConfig";
 import { listLlmModels } from "../../../lib/api/agent";
+import { localModelQuery } from "../../../lib/api/localModel";
 import { getUserErrorMessage } from "../../../lib/api/client";
 
 export function ComposerContext({ busy = false }: { busy?: boolean }) {
@@ -24,10 +25,11 @@ export function ComposerContext({ busy = false }: { busy?: boolean }) {
   const openProjectCreate = useWorkspaceStore(state => state.openProjectCreate);
   const { projects, activeProject } = useProjectState(projectId);
   const config = useSavedApiConfig();
+  const modelStatus = useQuery(localModelQuery);
   const [modelOpen, setModelOpen] = useState(false);
   const models = useQuery({
     queryKey: ["llm-models", config.apiBase, config.credentialId],
-    enabled: modelOpen && Boolean(config.credentialId),
+    enabled: modelStatus.data?.mode === "remote" && modelOpen && Boolean(config.credentialId),
     queryFn: async () => {
       const result = await listLlmModels(config.credentialId, config.apiBase);
       if (!result.ok) throw new Error(result.error_message || "模型列表暂不可用。");
@@ -57,7 +59,14 @@ export function ComposerContext({ busy = false }: { busy?: boolean }) {
         <DropdownMenuItem onSelect={openProjectCreate}><PlusIcon size={16} aria-hidden="true" />打开文件夹</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-    <DropdownMenu open={modelOpen} onOpenChange={setModelOpen}>
+    {modelStatus.data?.mode === "local" ? (
+      <Button type="button" variant="ghost" size="sm" className="dbfox-composer__context dbfox-composer__model"
+        aria-label={`本地模型：${modelStatus.data.model ?? "不可用"}`}
+        title={modelStatus.data.error_message || modelStatus.data.model || "本地模型设置"}
+        onClick={event => { event.stopPropagation(); openSettings("model"); }}>
+        <span>本地 · {modelStatus.data.model || "不可用"}</span>
+      </Button>
+    ) : modelStatus.data?.mode === "remote" ? <DropdownMenu open={modelOpen} onOpenChange={setModelOpen}>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="dbfox-composer__context dbfox-composer__model"
           disabled={busy} aria-label={`当前模型：${config.modelName || (config.credentialId ? "服务默认" : "配置模型")}`}
@@ -82,6 +91,6 @@ export function ComposerContext({ busy = false }: { busy?: boolean }) {
         </> : null}
         <DropdownMenuItem onSelect={() => openSettings("model")}><GearIcon size={16} aria-hidden="true" />模型服务设置</DropdownMenuItem>
       </DropdownMenuContent>
-    </DropdownMenu>
+    </DropdownMenu> : null}
   </>;
 }

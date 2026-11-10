@@ -8,6 +8,7 @@
 
 ## 当前整改
 
+- Windows 实机、封装版进程树和开发反馈链的验证记录。[本机开发执行验收](./local-development-execution-verification.md)
 - [Apple HIG 工作台设计与验收](./apple-hig-workbench-20261107.md)：当前全产品设计基础；覆盖逐功能任务、渐进展开、焦点与反馈、统一图标和 13 个内置 DLC，并记录真实客户端发现的数据样例合同缺口。
 - [前期全局设计实施记录](../archive/reviews/global-design-20261107.md)：历史视觉方案与窗口、协议、图标来源修复证据；外观方向已由 Apple HIG 工作台替代。
 - [全局图标与界面比例诊断](./icon-system-review-20261107.md)：覆盖 Core、SDK、DLC 和品牌/文件资产的实施前盘点、比例问题与真实开源图形对照。

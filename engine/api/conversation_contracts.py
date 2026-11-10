@@ -48,7 +48,7 @@ class ConversationInputRequest(BaseModel):
         max_length=MAX_INPUT_REFERENCES,
     )
     workspace_context: dict[str, object] = Field(default_factory=dict)
-    llm_credential_id: str = Field(min_length=1, max_length=256)
+    llm_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
     api_base: str | None = Field(default=None, max_length=2048)
     model_name: str | None = Field(default=None, max_length=256)
 

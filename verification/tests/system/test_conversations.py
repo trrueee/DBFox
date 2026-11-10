@@ -12,6 +12,8 @@ from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.run_item import dump_run_item, function_call_item
 from engine.agent.session import DeliveryMode
+from engine.json_codec import load_object
+from engine.llm.local_model import ManagedLocalModel
 from engine.main import LOCAL_SECURE_TOKEN, app
 from engine.dlc import BuiltinContributionSet, ContributionCompiler
 from engine.runtime_composition import active_runtime_snapshot, set_active_runtime_snapshot
@@ -505,6 +507,80 @@ def test_request_contract_rejects_missing_llm_credential_before_creating_a_run(
     assert response.headers["content-type"].startswith("application/problem+json")
     assert response.json()["code"] == "VALIDATION_ERROR"
     assert response.json()["detail"] == "Request validation failed."
+    assert db_session.query(AgentRun).count() == before
+
+
+@pytest.mark.parametrize("legacy_connection", [{}, {
+    "llm_credential_id": "old-cloud-credential",
+    "api_base": "https://api.openai.com/v1",
+    "model_name": "old-cloud-model",
+}])
+def test_local_model_is_authoritative_for_conversation_admission(
+    client, db_session, monkeypatch, tmp_path, legacy_connection,
+):
+    import json
+
+    profile_path = tmp_path / "local-model.json"
+    profile_path.write_text(json.dumps({
+        "model_name": "qwen3.5:4b-q4_K_M",
+        "model_digest": "a" * 64,
+        "model_size_bytes": 3_300_000_000,
+        "executable": str(tmp_path / "ollama.exe"),
+        "models_dir": str(tmp_path),
+        "state_dir": str(tmp_path),
+        "scratch_dir": str(tmp_path),
+        "context_length": 16384,
+    }), encoding="utf-8")
+    model = ManagedLocalModel(profile_path)
+    monkeypatch.setattr(model, "installation_error", lambda: None)
+    monkeypatch.setattr(app.state, "local_model", model, raising=False)
+    created = client.post(
+        "/api/v1/conversations",
+        json={"project_id": "proj-test", "title": "Local model"},
+        headers=_headers(),
+    )
+    conversation_id = created.json()["session"]["id"]
+    response = client.post(
+        f"/api/v1/conversations/{conversation_id}/inputs",
+        json={"content": "分析订单", "idempotency_key": "local-model-input", **legacy_connection},
+        headers=_headers(),
+    )
+    assert response.status_code == 202
+    run = db_session.get(AgentRun, response.json()["run_id"])
+    assert run.llm_credential_id is None
+    assert run.api_base is None
+    assert run.model_name == "qwen3.5:4b-q4_K_M"
+    assert load_object(run.request_json)["model_digest"] == "a" * 64
+
+
+def test_unusable_local_profile_blocks_cloud_requests(client, db_session, monkeypatch, tmp_path):
+    profile_path = tmp_path / "local-model.json"
+    profile_path.write_text("{invalid", encoding="utf-8")
+    monkeypatch.setattr(app.state, "local_model", ManagedLocalModel(profile_path), raising=False)
+    status = client.get("/api/v1/agent/local-model", headers=_headers()).json()
+    assert (status["mode"], status["error_code"]) == ("local", "LOCAL_MODEL_PROFILE_INVALID")
+    cloud = {
+        "llm_credential_id": "old-cloud-credential",
+        "api_base": "https://api.openai.com/v1",
+    }
+    cloud_test = client.post("/api/v1/agent/llm/test", json=cloud, headers=_headers())
+    assert cloud_test.status_code == 409
+    assert cloud_test.json()["code"] == "LOCAL_MODEL_REQUIRED"
+
+    created = client.post(
+        "/api/v1/conversations",
+        json={"project_id": "proj-test", "title": "Unavailable local model"},
+        headers=_headers(),
+    )
+    before = db_session.query(AgentRun).count()
+    conversation_id = created.json()["session"]["id"]
+    response = client.post(
+        f"/api/v1/conversations/{conversation_id}/inputs",
+        json={"content": "分析订单", "idempotency_key": "local-model-input", **cloud},
+        headers=_headers(),
+    )
+    assert response.status_code == 503
+    assert response.json()["code"] == "LOCAL_MODEL_PROFILE_INVALID"
     assert db_session.query(AgentRun).count() == before
 
 

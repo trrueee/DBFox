@@ -105,11 +105,11 @@ class WorkspaceFileSearchTool(BaseTool[FileSearchInput, FileSearchOutput]):
         try:
             directory = _workspace(context).search_files(input.query, path_prefix=input.path_prefix, limit=input.limit)
         except WorkspaceError as exc:
-            raise ToolInputError("无法读取该项目文件夹。") from exc
+            raise ToolInputError(str(exc)) from exc
         matches = directory.entries
         return FileSearchOutput(
             query=input.query,
-            path_prefix=input.path_prefix,
+            path_prefix=WorkspaceService.normalize(input.path_prefix),
             matches=[
                 FileEntry(name=item.name, path=item.relative_path, is_dir=item.is_dir)
                 for item in matches
@@ -166,7 +166,7 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
         try:
             snapshot = _workspace(context).read_text_file(input.path)
         except WorkspaceError as exc:
-            raise ToolInputError("无法读取该项目文件。") from exc
+            raise ToolInputError(str(exc)) from exc
         workspace_ref = _scope(context)
         workspace_id = str(workspace_ref.id)
         workspace_version = str(workspace_ref.version or "")
@@ -285,10 +285,8 @@ class WorkspaceFileWriteTool(BaseTool[FileWriteInput, FileMutationOutput]):
                 input.content,
                 expected_sha256=input.expected_sha256,
             )
-        except WorkspaceConflict as exc:
-            raise ToolInputError(str(exc)) from exc
         except WorkspaceError as exc:
-            raise ToolInputError("无法写入该项目文件。") from exc
+            raise ToolInputError(str(exc)) from exc
         return _patch_outcome(
             _mutation_output(snapshot, created=input.expected_sha256 is None),
             workspace_ref=_scope(context),
@@ -334,10 +332,8 @@ class WorkspaceFileEditTool(BaseTool[FileEditInput, FileMutationOutput]):
                 expected_sha256=input.expected_sha256,
                 replace_all=input.replace_all,
             )
-        except WorkspaceConflict as exc:
-            raise ToolInputError(str(exc)) from exc
         except WorkspaceError as exc:
-            raise ToolInputError("无法精确编辑该项目文件，请重新读取并使用唯一锚点。") from exc
+            raise ToolInputError(str(exc)) from exc
         return _patch_outcome(
             _mutation_output(snapshot, created=False),
             workspace_ref=_scope(context),
@@ -375,7 +371,7 @@ class WorkspaceFileDeleteTool(BaseTool[FileDeleteInput, FileDeleteOutput]):
         try:
             _workspace(context).delete_path(input.path)
         except WorkspaceError as exc:
-            raise ToolInputError("无法删除该项目路径。") from exc
+            raise ToolInputError(str(exc)) from exc
         return FileDeleteOutput(path=WorkspaceService.normalize(input.path), deleted=True)
 
 
@@ -400,10 +396,8 @@ class WorkspaceFileMoveTool(BaseTool[FileMoveInput, FileMoveOutput]):
     def run(self, input: FileMoveInput, context: ExtensionToolRunContext):
         try:
             _workspace(context).move_path(input.source_path, input.destination_path)
-        except WorkspaceConflict as exc:
-            raise ToolInputError(str(exc)) from exc
         except WorkspaceError as exc:
-            raise ToolInputError("无法移动该项目路径。") from exc
+            raise ToolInputError(str(exc)) from exc
         return FileMoveOutput(
             source_path=WorkspaceService.normalize(input.source_path),
             destination_path=WorkspaceService.normalize(input.destination_path),
@@ -438,7 +432,7 @@ class WorkspaceFileGrepTool(BaseTool[FileGrepInput, FileGrepOutput]):
                 limit=input.limit,
             )
         except WorkspaceError as exc:
-            raise ToolInputError("无法搜索项目文件内容。") from exc
+            raise ToolInputError(str(exc)) from exc
         return FileGrepOutput(
             query=input.query,
             matches=tuple(FileGrepMatch(
@@ -490,7 +484,7 @@ class WorkspaceCommandRunTool(BaseTool[CommandRunInput, CommandRunOutput]):
                 timeout_seconds=input.timeout_seconds,
             )
         except WorkspaceError as exc:
-            raise ToolInputError("无法在项目工作区运行该命令。") from exc
+            raise ToolInputError(str(exc)) from exc
         return CommandRunOutput(
             argv=result.argv,
             cwd=result.cwd,
@@ -623,7 +617,7 @@ def _register_operations(host: BackendExtensionHost, store: WorkspaceBindingStor
         try:
             directory = project_workspace(context).list_directory(input.path)
         except WorkspaceError as exc:
-            raise _operation_error("Workspace directory cannot be read") from exc
+            raise _operation_error(str(exc)) from exc
         return FileListOutput(
             path=WorkspaceService.normalize(input.path),
             entries=[
@@ -637,7 +631,7 @@ def _register_operations(host: BackendExtensionHost, store: WorkspaceBindingStor
         try:
             snapshot = project_workspace(context).read_text_file(input.path)
         except WorkspaceError as exc:
-            raise _operation_error("Workspace file cannot be read") from exc
+            raise _operation_error(str(exc)) from exc
         content = snapshot.content[input.offset : input.offset + input.limit]
         return FileReadOutput(
             path=snapshot.relative_path,
@@ -662,7 +656,7 @@ def _register_operations(host: BackendExtensionHost, store: WorkspaceBindingStor
         except WorkspaceConflict as exc:
             raise _operation_error(str(exc), code="WORKSPACE_CONFLICT", status=409) from exc
         except WorkspaceError as exc:
-            raise _operation_error("Workspace file cannot be written") from exc
+            raise _operation_error(str(exc)) from exc
         return _mutation_output(snapshot, created=input.expected_sha256 is None)
 
     def edit_file(input: FileEditInput, context: DlcOperationContext) -> FileMutationOutput:
@@ -677,14 +671,14 @@ def _register_operations(host: BackendExtensionHost, store: WorkspaceBindingStor
         except WorkspaceConflict as exc:
             raise _operation_error(str(exc), code="WORKSPACE_CONFLICT", status=409) from exc
         except WorkspaceError as exc:
-            raise _operation_error("Workspace file cannot be edited") from exc
+            raise _operation_error(str(exc)) from exc
         return _mutation_output(snapshot, created=False)
 
     def delete_file(input: FileDeleteInput, context: DlcOperationContext) -> FileDeleteOutput:
         try:
             project_workspace(context).delete_path(input.path)
         except WorkspaceError as exc:
-            raise _operation_error("Workspace path cannot be deleted") from exc
+            raise _operation_error(str(exc)) from exc
         return FileDeleteOutput(path=WorkspaceService.normalize(input.path), deleted=True)
 
     def move_file(input: FileMoveInput, context: DlcOperationContext) -> FileMoveOutput:
@@ -693,7 +687,7 @@ def _register_operations(host: BackendExtensionHost, store: WorkspaceBindingStor
         except WorkspaceConflict as exc:
             raise _operation_error(str(exc), code="WORKSPACE_CONFLICT", status=409) from exc
         except WorkspaceError as exc:
-            raise _operation_error("Workspace path cannot be moved") from exc
+            raise _operation_error(str(exc)) from exc
         return FileMoveOutput(
             source_path=WorkspaceService.normalize(input.source_path),
             destination_path=WorkspaceService.normalize(input.destination_path),
@@ -708,7 +702,7 @@ def _register_operations(host: BackendExtensionHost, store: WorkspaceBindingStor
                 limit=input.limit,
             )
         except WorkspaceError as exc:
-            raise _operation_error("Workspace files cannot be searched") from exc
+            raise _operation_error(str(exc)) from exc
         return FileGrepOutput(
             query=input.query,
             matches=tuple(FileGrepMatch(
@@ -749,20 +743,23 @@ def register(host: BackendExtensionHost) -> None:
     host.resources.register_resolver(WORKSPACE_RESOURCE_KIND, store.resolve)
     host.context.register(WorkspaceContextContributor(store))
     host.agent_guidance.register(CapabilityGuidanceSpec(
-        id="workspace_evidence", version="1",
+        id="workspace_evidence", version="2",
         applies_to_resource_kinds=(WORKSPACE_RESOURCE_KIND,),
         applies_to_artifact_types=(FILE_SNAPSHOT, CODE_PATCH),
         tool_refs=tuple(ToolKey(owner_id="dbfox.workspace", local_name=name) for name in (
             "file_search", "file_read", "file_write", "file_edit", "file_grep", "command_run",
         )),
         instructions=(
+            "The bound project folder is the root for Workspace tool paths. Use . or an empty path_prefix or cwd for that root. "
+            "Reuse project-relative paths from search results. Executable paths in argv are separate from cwd. "
+            "A nonempty literal name/path query searches recursively within its scope. An empty name query lists direct children. "
             "Distinguish a file's assertions, static code review, saved changes, and observed execution. "
             "A document saying completed or a successful file write does not prove a feature works. "
             "Report verification as unverified unless supported by available execution evidence, and state its scope. "
             "Never turn a search with no matches or a truncated listing into proof that the entire project lacks a file, test, or implementation. "
-            "Use file_search with a nonempty literal name/path query for bounded recursive discovery, or an empty query to list direct children. "
             "Read the required remaining file pages before concluding from truncated content. "
-            "Do not repeat an interrupted mutation or command until its outcome is verified; a rejection is not authorization to resubmit it."
+            "Correct invalid paths using the tool feedback. Verify the outcome of an interrupted mutation or command before attempting it again. "
+            "A denied approval must be respected."
         ),
     ))
     host.artifacts.register(FILE_SNAPSHOT, 1, WorkspaceFileSnapshotPayload)

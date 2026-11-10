@@ -169,7 +169,7 @@ class SessionRepository:
         resource_refs: tuple[ResourceScopeRef, ...],
         content: str,
         idempotency_key: str,
-        llm_credential_id: str,
+        llm_credential_id: str | None,
         api_base: str | None,
         model_name: str | None,
         request_payload: dict[str, Any],

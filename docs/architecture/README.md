@@ -30,6 +30,8 @@
 8. [测试与测评系统边界](./verification-system.md)：与产品物理分离但驱动真实 Runtime loop 的验证架构。
 9. [DLC 工件导航合同](./dlc-artifact-navigation.md)：API v2 可选的 Workbench 工件导航、持久身份校验与作用域取消；[验证记录](../quality/dlc-artifact-navigation-validation.md)。
 10. [对话附件与工作簿分析](./conversation-attachments.md)：会话私有附件、历史追问、Data SQL 复用和右侧只读工作簿；[第四阶段实施记录](../archive/reviews/conversation-attachments-implementation.md)。
+11. Windows 本机开发环境的逐次审批、进程树与结果边界。[本机开发执行环境](./local-development-execution.md)
+12. 本机模型的存储、默认路由与推理生命周期。[本地模型](./local-model.md)
 
 Creative DLC 的波次、独立职责与未完成门禁见[开发计划](./creative-dlc-program.md)。
 

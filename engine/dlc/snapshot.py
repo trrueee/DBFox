@@ -33,6 +33,7 @@ class ActivatedDlcIdentity:
     trust_status: DlcTrustStatus = DlcTrustStatus.TRUSTED_SIGNED
     frontend_entrypoint: str | None = None
     permissions: tuple[str, ...] = ()
+    system_pinned: bool = False
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ class ToolContribution:
     owner_id: str
     package_digest: str | None = None
     provider_name: str | None = None
+    host_supervised_process: bool = False
 
 
 @dataclass(frozen=True)
@@ -73,6 +75,7 @@ class ArtifactRepresentationContribution:
     representation_type: str
     provider: ArtifactRepresentationProvider
     owner_id: str
+    session_scoped: bool = False
 
 
 @dataclass(frozen=True)

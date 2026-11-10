@@ -66,7 +66,7 @@ from engine.llm.config import (
 )
 from engine.llm.endpoint_policy import LlmEndpointPolicyError
 from engine.json_codec import load_object
-from engine.models import AgentSessionInput, AgentTurn
+from engine.models import AgentRun, AgentSessionInput, AgentTurn
 from engine.tools.materialization import ToolMaterialization, materialize_tools
 from engine.tools.runtime import ToolExecutionTask, ToolExecutor, ToolRegistry
 from engine.tools.runtime.attempt import CompositeResourceResolver
@@ -90,9 +90,20 @@ class ModelAdapter(Protocol):
 class ProviderSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    credential_id: str
+    credential_id: str | None
     api_base: str | None = None
     model_name: str | None = None
+    model_digest: str | None = None
+
+    @classmethod
+    def from_run(cls, run: AgentRun) -> ProviderSettings:
+        payload = load_object(str(run.request_json or "{}"))
+        return cls(
+            credential_id=str(run.llm_credential_id) if run.llm_credential_id else None,
+            api_base=str(run.api_base) if run.api_base else None,
+            model_name=str(run.model_name) if run.model_name else None,
+            model_digest=payload.get("model_digest"),
+        )
 
 
 @dataclass(frozen=True)
@@ -152,7 +163,7 @@ LIVE_STREAM_HUB = LiveStreamHub()
 _FINALIZATION_TOOL_NAMES = frozenset({"update_plan"})
 
 
-def _default_model_factory(settings: ProviderSettings) -> ModelAdapter:
+def build_remote_model_adapter(settings: ProviderSettings) -> ModelAdapter:
     config = resolve_product_llm_config_from_credential(
         llm_credential_id=settings.credential_id,
         api_base=settings.api_base,
@@ -170,12 +181,13 @@ class RunLoop:
         session_factory: Callable[[], Session],
         model_factory: Callable[
             [ProviderSettings], ModelAdapter
-        ] = _default_model_factory,
+        ] = build_remote_model_adapter,
         registry: ToolRegistry,
         context_contributors: tuple[Callable[[Session], ContextContributor], ...],
         capability_guidance: tuple[CapabilityGuidanceContribution, ...] | None = None,
         completion: CompletionGate,
         definition: AgentDefinition = DEFAULT_AGENT_DEFINITION,
+        use_declared_tool_inputs: bool = False,
         live_stream: LiveStreamHub = LIVE_STREAM_HUB,
         tool_executor: ToolExecutor | None = None,
         resource_resolver: CompositeResourceResolver | None = None,
@@ -201,6 +213,7 @@ class RunLoop:
         if not self.registry.frozen:
             self.registry.freeze()
         self.definition = definition
+        self.use_declared_tool_inputs = use_declared_tool_inputs
         self.live_stream = live_stream
         self.turn_recorder = RunTurnRecorder(
             session_factory=self.session_factory,
@@ -419,11 +432,7 @@ class RunLoop:
             run_result = load_object(str(run.result_json or "{}"))
             focus = run_result.get("focus")
             finalizing = isinstance(focus, dict) and focus.get("kind") == "synthesize"
-            provider_settings = ProviderSettings(
-                credential_id=str(run.llm_credential_id),
-                api_base=str(run.api_base) if run.api_base else None,
-                model_name=str(run.model_name) if run.model_name else None,
-            )
+            provider_settings = ProviderSettings.from_run(run)
             control = LeaseAwareRunControl(
                 run=run,
                 limits=self.definition.limits,
@@ -853,7 +862,9 @@ class RunLoop:
             )
             tool_schemas = OpenAIModelAdapter.prepare_tools(
                 model_name=str(run.model_name or ""),
-                tools=tools.provider_schemas(),
+                tools=tools.provider_schemas(
+                    declared_inputs=self.registry if self.use_declared_tool_inputs else None,
+                ),
             )
             artifact_types = frozenset(
                 artifact.type for artifact in context.selected_artifacts
@@ -890,11 +901,7 @@ class RunLoop:
                 model_name=str(run.model_name or ""),
                 phase=(RunPhase.FINALIZING if finalizing else RunPhase.WAITING_MODEL),
             )
-            settings = ProviderSettings(
-                credential_id=str(run.llm_credential_id),
-                api_base=str(run.api_base) if run.api_base else None,
-                model_name=str(run.model_name) if run.model_name else None,
-            )
+            settings = ProviderSettings.from_run(run)
             db.commit()
             return _PreparedTurn(
                 turn_id=str(turn.id),

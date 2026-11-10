@@ -12,6 +12,7 @@ import logging
 import os
 import tempfile
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -39,9 +40,13 @@ from engine.dlc.system_bundle import (
     load_system_dlc_bundle_manifest,
 )
 from engine.dlc.snapshot import (
+    ArtifactContractContribution,
+    ArtifactRepresentationContribution,
     CapabilityGuidanceContribution,
     ResourceResolverContribution,
     RuntimeContributionSnapshot,
+    ToolContribution,
+    compute_snapshot_id,
 )
 from engine.dlc.trust import DlcTrustStore
 from engine.representation import ArtifactRepresentationDescriptor
@@ -54,6 +59,8 @@ from engine.tools.runtime.attempt import CompositeResourceResolver, ScopedResour
 
 if TYPE_CHECKING:
     from engine.agent.loop import RunLoop
+    from engine.llm.local_model import ManagedLocalModel
+    from engine.local_execution.broker import LocalExecutionBroker
     from engine.workbench_presentations import WorkbenchPresentationBroker
 
 _ACTIVE_RUNTIME_SNAPSHOT: RuntimeContributionSnapshot | None = None
@@ -118,6 +125,8 @@ def initialize_runtime_snapshot(
             system_dlc_manifest = Path(configured_manifest)
 
     compiler_trust_store = trust_store
+    system_pins: dict[str, str] = {}
+    system_publisher: str | None = None
     if resolved_system_dlc_dir is not None:
         manifest_path = system_dlc_manifest or embedded_system_dlc_manifest_path()
         bootstrap_result = bootstrap_system_dlcs(
@@ -126,6 +135,8 @@ def initialize_runtime_snapshot(
             manifest_path=manifest_path,
         )
         official = load_system_dlc_bundle_manifest(manifest_path)
+        system_pins = {pin.dlc_id: pin.package_digest for pin in official.packages}
+        system_publisher = bootstrap_result.publisher_key_id
         trusted_keys = compiler_trust_store.load() if compiler_trust_store else {}
         trusted_keys[bootstrap_result.publisher_key_id] = (
             official.publisher_public_key
@@ -145,6 +156,12 @@ def initialize_runtime_snapshot(
             "Kernel only"
         )
     snapshot = compiler.compile(built_ins=platform_builtin_contributions())
+    snapshot = replace(snapshot, active_dlcs=tuple(
+        replace(item, system_pinned=True) if (
+            item.package_digest == system_pins.get(item.dlc_id) and item.publisher_key_id == system_publisher
+        ) else item
+        for item in snapshot.active_dlcs
+    ))
     set_active_runtime_snapshot(snapshot)
     return snapshot
 
@@ -166,6 +183,7 @@ def build_product_tool_registry(
             owner=tool_contrib.owner_id,
             package_digest=tool_contrib.package_digest,
             provider_name=tool_contrib.provider_name,
+            host_supervised_process=tool_contrib.host_supervised_process,
         )
     from engine.tools.builtin.project_resources import ProjectResourceSearchTool
     from engine.tools.builtin.registry import register_artifact_read, register_workbench_open
@@ -181,6 +199,44 @@ def build_product_tool_registry(
     if workbench_presentations is not None:
         register_workbench_open(registry, workbench_presentations)
     return registry.freeze()
+
+
+def compose_local_execution(
+    snapshot: RuntimeContributionSnapshot,
+    session_factory: Callable[[], Session],
+) -> tuple[RuntimeContributionSnapshot, LocalExecutionBroker | None]:
+    """Attach the Windows process owner to the product, outside package activation."""
+    from engine.local_execution.broker import LocalExecutionBroker, supported
+    from engine.local_execution.contracts import WORKSPACE_KIND
+    from engine.local_execution.representation import (
+        LOG_REPRESENTATION, RESULT_ARTIFACT, ExecutionLogRepresentation, ExecutionResultPayload,
+    )
+    from engine.tools.builtin.registry import local_execution_contributions
+
+    owner = "dbfox.workspace"
+    workspace = next((item for item in snapshot.active_dlcs if item.dlc_id == owner and item.system_pinned), None)
+    if not supported() or workspace is None:
+        return snapshot, None
+    legacy = next(item for item in snapshot.tools if item.owner_id == owner and item.tool.name == "command_run")
+    resolver = next(item.resolver for item in snapshot.resource_resolvers if (
+        item.owner_id == owner and item.kind == WORKSPACE_KIND and item.binding == "scope_only"
+    ))
+    broker = LocalExecutionBroker(session_factory, resolver)
+    new_tools: tuple[ToolContribution, ...] = local_execution_contributions(broker, legacy)
+    return replace(
+        snapshot,
+        snapshot_id=compute_snapshot_id(snapshot.active_dlcs, (
+            "dbfox.core", "dbfox.conversation", "dbfox.local_execution.v1",
+        )),
+        tools=tuple(item for item in snapshot.tools if item is not legacy) + new_tools,
+        artifact_contracts=(*snapshot.artifact_contracts, ArtifactContractContribution(
+            RESULT_ARTIFACT, 1, ExecutionResultPayload, owner,
+        )),
+        artifact_representations=(*snapshot.artifact_representations, ArtifactRepresentationContribution(
+            RESULT_ARTIFACT, LOG_REPRESENTATION, ExecutionLogRepresentation(broker), owner,
+            session_scoped=True,
+        )),
+    ), broker
 
 
 def default_project_resource_providers(
@@ -301,6 +357,14 @@ def authorize_artifact_session_resources(db: Session, artifact: Any, session_id:
     if session_id is not None and session_id != artifact.session_id:
         raise ArtifactRepresentationError("NOT_FOUND", "Artifact is unavailable in this conversation.", status_code=404)
     snap = get_active_runtime_snapshot()
+    if any(item.session_scoped for item in snap.artifact_representations_for(artifact.type)):
+        from engine.attachments import AttachmentError, require_session
+        if session_id is None:
+            raise ArtifactRepresentationError("NOT_FOUND", "Artifact requires its conversation scope.", status_code=404)
+        try:
+            require_session(db, session_id)
+        except AttachmentError as exc:
+            raise ArtifactRepresentationError("NOT_FOUND", "Artifact conversation is unavailable.", status_code=404) from exc
     session_owners = {c.owner_id for c in snap.session_resource_contributions}
     if not any(ref.kind.startswith(owner + ".") for owner in session_owners for ref in artifact.resource_refs):
         return
@@ -454,12 +518,38 @@ def build_product_run_loop(
     session_factory: Callable[[], Session],
     snapshot: RuntimeContributionSnapshot | None = None,
     workbench_presentations: WorkbenchPresentationBroker | None = None,
+    local_model: ManagedLocalModel | None = None,
 ) -> RunLoop:
     """Construct the production RunLoop with explicit product contributions from snapshot."""
     from engine.agent.completion import CompletionGate
-    from engine.agent.loop import RunLoop
+    from engine.agent.definition import DEFAULT_AGENT_DEFINITION
+    from engine.agent.loop import ModelAdapter, ProviderSettings, RunLoop, build_remote_model_adapter
+    from engine.llm.config import LlmConfigurationError
+    from engine.llm.local_model import LOCAL_MODEL_OUTPUT_TOKENS
 
     snap = snapshot or get_active_runtime_snapshot()
+    definition = DEFAULT_AGENT_DEFINITION
+    if local_model is not None and local_model.profile is not None:
+        definition = definition.model_copy(update={
+            "limits": definition.limits.model_copy(update={
+                "max_prompt_tokens": local_model.profile.context_length - LOCAL_MODEL_OUTPUT_TOKENS - 1024,
+                "model_request_timeout_seconds": 90,
+                "model_first_event_timeout_seconds": 60,
+                "model_turn_timeout_seconds": 240,
+            }),
+        })
+
+    def model_factory(settings: ProviderSettings) -> ModelAdapter:
+        if settings.model_digest is None:
+            if local_model is not None and local_model.configured:
+                raise LlmConfigurationError("Local model required", code="LOCAL_MODEL_REQUIRED")
+            return build_remote_model_adapter(settings)
+        if local_model is None:
+            raise LlmConfigurationError("Local model missing", code="LOCAL_MODEL_NOT_CONFIGURED")
+        profile = local_model.require_profile()
+        if profile.model_digest != settings.model_digest or profile.model_name != settings.model_name:
+            raise LlmConfigurationError("Run model changed", code="LOCAL_MODEL_WEIGHTS_CHANGED")
+        return local_model.adapter()
 
     def representation_provider(artifact_type: str, representation_type: str):
         contribution = snap.get_artifact_representation(
@@ -474,6 +564,9 @@ def build_product_run_loop(
 
     return RunLoop(
         session_factory=session_factory,
+        model_factory=model_factory,
+        definition=definition,
+        use_declared_tool_inputs=local_model is not None and local_model.configured,
         registry=build_product_tool_registry(snap, workbench_presentations=workbench_presentations),
         context_contributors=default_context_contributors(snap),
         capability_guidance=default_capability_guidance(snap),

@@ -1081,17 +1081,26 @@ class ToolDispatcher:
         rows = db.execute(
             select(
                 AgentToolInvocation.tool_name,
+                AgentToolInvocation.error_code,
                 AgentTurn.tool_materialization_json,
             )
             .join(AgentTurn, AgentTurn.id == AgentToolInvocation.turn_id)
             .where(AgentToolInvocation.run_id == run_id)
         ).all()
         count = 0
-        for tool_name, materialization_json in rows:
+        for tool_name, error_code, materialization_json in rows:
             materialization = ToolMaterialization.model_validate_json(
                 str(materialization_json)
             )
-            if materialization.require(str(tool_name)).kind != "control":
+            try:
+                tool = materialization.require(str(tool_name))
+            except KeyError:
+                # Dispatch records unavailable names as rejections without
+                # spending the execution budget. Restore the same accounting.
+                if error_code != "UNKNOWN_TOOL":
+                    raise
+                continue
+            if tool.kind != "control":
                 count += 1
         return count
 

@@ -8,6 +8,9 @@ import { useWorkspaceStore } from "../../../../stores/workspaceStore";
 
 const models = vi.hoisted(() => vi.fn());
 vi.mock("../../../../lib/api/agent", () => ({ listLlmModels: models }));
+vi.mock("../../../../lib/api/localModel", () => ({
+  localModelQuery: { queryKey: ["local-model"], queryFn: async () => ({ mode: "remote" }) },
+}));
 vi.mock("../../../projects/useProjectState", () => ({ useProjectState: (id: string) => {
   const projects = [{ id: "p1", name: "DBFox" }, { id: "p2", name: "Research" }];
   return { projects, activeProject: projects.find(p => p.id === id) };
@@ -22,13 +25,13 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); client.clear(); localStorage.clear(); });
 function renderContext() { return render(<QueryClientProvider client={client}><ComposerContext /></QueryClientProvider>); }
-function open(name: RegExp) { fireEvent.pointerDown(screen.getByRole("button", { name }), { button: 0, ctrlKey: false, pointerType: "mouse" }); }
+async function open(name: RegExp) { fireEvent.pointerDown(await screen.findByRole("button", { name }), { button: 0, ctrlKey: false, pointerType: "mouse" }); }
 
 describe("composer project and model context", () => {
   it("fetches model options only when opened and saves the model without copying credentials", async () => {
     renderContext();
     expect(models).not.toHaveBeenCalled();
-    open(/当前模型/);
+    await open(/当前模型/);
     fireEvent.click(await screen.findByRole("menuitem", { name: "model-new" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "当前模型：model-new" })).toBeInTheDocument());
     expect(models).toHaveBeenCalledWith("vault-reference", "https://example.test/v1");
@@ -38,7 +41,7 @@ describe("composer project and model context", () => {
   it("switches projects through the existing shell and keeps each in-memory draft", async () => {
     useWorkspaceStore.getState().setDraftInput("project one draft");
     renderContext();
-    open(/当前项目/);
+    await open(/当前项目/);
     fireEvent.click(await screen.findByRole("menuitem", { name: "Research" }));
     expect(useWorkspaceStore.getState().activeProjectId).toBe("p2");
     useWorkspaceStore.getState().setDraftInput("project two draft");
@@ -48,6 +51,12 @@ describe("composer project and model context", () => {
   it("observes configuration changes from the model settings screen", async () => {
     renderContext();
     act(() => saveStoredApiConfig({ credentialId: "vault-reference", apiBase: "https://example.test/v1", modelName: "changed-in-settings" }));
-    expect(screen.getByRole("button", { name: "当前模型：changed-in-settings" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "当前模型：changed-in-settings" })).toBeInTheDocument();
+  });
+  it("uses the Sidecar model in local mode without looking up cloud models", async () => {
+    client.setQueryData(["local-model"], { mode: "local", model: "qwen3.5:4b-q4_K_M" });
+    renderContext();
+    expect(await screen.findByRole("button", { name: "本地模型：qwen3.5:4b-q4_K_M" })).toBeInTheDocument();
+    expect(models).not.toHaveBeenCalled();
   });
 });

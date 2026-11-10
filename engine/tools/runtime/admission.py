@@ -25,6 +25,7 @@ class ToolAdmissionDecision(BaseModel):
     reason: str = Field(min_length=1, max_length=512)
     risk_level: Literal["safe", "warning", "danger"] = "safe"
     approval_subject: dict[str, JsonValue] | None = None
+    approval_review: dict[str, JsonValue] | None = None
     resource_ref: ResourceScopeRef | None = None
 
     @model_validator(mode="after")
@@ -33,6 +34,10 @@ class ToolAdmissionDecision(BaseModel):
             raise ValueError("approval_required admission needs an approval_subject")
         if self.status != "approval_required" and self.approval_subject is not None:
             raise ValueError("Only approval_required admission may expose a subject")
+        if self.approval_review is not None and (
+            self.status != "approval_required" or byte_size(self.approval_review) > 8192
+        ):
+            raise ValueError("Only approval_required admission may expose bounded review details")
         if (
             self.approval_subject is not None
             and byte_size(self.approval_subject) > MAX_ADMISSION_SUBJECT_BYTES

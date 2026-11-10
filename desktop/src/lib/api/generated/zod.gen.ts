@@ -548,6 +548,41 @@ export const zFunctionCallOutputPayload = z.object({
 });
 
 /**
+ * JobView
+ */
+export const zJobView = z.object({
+    active_processes: z.int().nullable(),
+    argv: z.array(z.string()),
+    cwd: z.string(),
+    duration_ms: z.int(),
+    executable: z.string(),
+    first_cursor: z.int(),
+    id: z.string(),
+    interactive: z.boolean(),
+    last_cursor: z.int(),
+    lifetime: z.enum(['foreground', 'background']),
+    output_finalized: z.boolean(),
+    reason: z.string().nullable(),
+    retained_bytes: z.int(),
+    root_exit_code: z.int().nullable(),
+    run_id: z.string(),
+    shell_script: z.string().nullable(),
+    state: z.enum([
+        'starting',
+        'running',
+        'stopping',
+        'exited',
+        'start_failed',
+        'cancelled',
+        'timed_out',
+        'interrupted',
+        'unknown'
+    ]),
+    stdin_open: z.boolean(),
+    timeout_seconds: z.int()
+});
+
+/**
  * LlmModelOption
  */
 export const zLlmModelOption = z.object({
@@ -593,6 +628,49 @@ export const zLlmTestResponse = z.object({
     latency_ms: z.int(),
     model: z.string(),
     ok: z.boolean()
+});
+
+/**
+ * LocalModelStatus
+ */
+export const zLocalModelStatus = z.object({
+    context_length: z.int().nullish(),
+    error_code: z.string().nullish(),
+    error_message: z.string().nullish(),
+    mode: z.enum(['local', 'remote']),
+    model: z.string().nullish(),
+    model_size_bytes: z.int().nullish(),
+    models_dir: z.string().nullish()
+});
+
+/**
+ * LocalModelTestResponse
+ */
+export const zLocalModelTestResponse = z.object({
+    error_code: z.string().nullish(),
+    error_message: z.string().nullish(),
+    latency_ms: z.int(),
+    ok: z.boolean()
+});
+
+/**
+ * LogLine
+ */
+export const zLogLine = z.object({
+    cursor: z.int(),
+    stream: z.enum(['stdout', 'stderr']),
+    text: z.string()
+});
+
+/**
+ * JobPage
+ */
+export const zJobPage = z.object({
+    chunks: z.array(zLogLine),
+    cursor_expired: z.boolean(),
+    has_more: z.boolean(),
+    job: zJobView,
+    next_cursor: z.int()
 });
 
 /**
@@ -818,7 +896,7 @@ export const zConversationInputRequest = z.object({
     content: z.string().min(1).max(20000),
     delivery_mode: zDeliveryMode.optional().default('queue'),
     idempotency_key: z.string().min(8).max(256),
-    llm_credential_id: z.string().min(1).max(256),
+    llm_credential_id: z.string().min(1).max(256).nullish(),
     model_name: z.string().max(256).nullish(),
     references: z.array(zConversationInputReference).max(12).optional(),
     requested_resources: z.array(zRequestedResourceRef).max(16).nullish(),
@@ -1333,6 +1411,16 @@ export const zApiLlmTestApiV1AgentLlmTestPostBody = zLlmTestRequest;
  */
 export const zApiLlmTestApiV1AgentLlmTestPostResponse = zLlmTestResponse;
 
+/**
+ * Successful Response
+ */
+export const zApiLocalModelStatusApiV1AgentLocalModelGetResponse = zLocalModelStatus;
+
+/**
+ * Successful Response
+ */
+export const zApiLocalModelTestApiV1AgentLocalModelTestPostResponse = zLocalModelTestResponse;
+
 export const zResolveApprovalApiV1ApprovalsApprovalIdResolvePostBody = zApprovalResolutionRequest;
 
 export const zResolveApprovalApiV1ApprovalsApprovalIdResolvePostPath = z.object({
@@ -1470,6 +1558,38 @@ export const zListConversationEventsApiV1ConversationsConversationIdEventsGetQue
  * Successful Response
  */
 export const zListConversationEventsApiV1ConversationsConversationIdEventsGetResponse = z.array(zRuntimeEvent);
+
+export const zListExecutionJobsApiV1ConversationsConversationIdExecutionJobsGetPath = z.object({
+    conversation_id: z.string()
+});
+
+/**
+ * Response List Execution Jobs Api V1 Conversations  Conversation Id  Execution Jobs Get
+ *
+ * Successful Response
+ */
+export const zListExecutionJobsApiV1ConversationsConversationIdExecutionJobsGetResponse = z.array(zJobView);
+
+export const zReadExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdGetPath = z.object({
+    conversation_id: z.string(),
+    job_id: z.string().regex(/^job_[0-9a-f]{32}$/)
+});
+
+export const zReadExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdGetQuery = z.object({
+    after: z.int().gte(0).lte(9007199254740991).optional().default(0),
+    limit: z.int().gte(1).lte(16).optional().default(16),
+    tail: z.boolean().optional().default(false)
+});
+
+/**
+ * Successful Response
+ */
+export const zReadExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdGetResponse = zJobPage;
+
+export const zStopExecutionJobApiV1ConversationsConversationIdExecutionJobsJobIdStopPostPath = z.object({
+    conversation_id: z.string(),
+    job_id: z.string().regex(/^job_[0-9a-f]{32}$/)
+});
 
 export const zGetConversationHistoryApiV1ConversationsConversationIdHistoryGetPath = z.object({
     conversation_id: z.string()

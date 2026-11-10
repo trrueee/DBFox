@@ -59,6 +59,8 @@ class ApprovalRepository:
         if existing is not None:
             return self._domain(existing)
         now = _utcnow()
+        approval_contract = policy_decision.get("approval") or {}
+        review = approval_contract.get("review") if isinstance(approval_contract, dict) else None
         row = AgentApproval(
             id=f"approval_{uuid4().hex}", run_id=str(run.id), session_id=str(run.session_id),
             step_name="tool_execution", tool_name=str(invocation.tool_name),
@@ -70,6 +72,7 @@ class ApprovalRepository:
             requested_action_json=_json({
                 "tool_name": str(invocation.tool_name),
                 "arguments": policy_decision.get("safe_args") or {},
+                **({"review": review} if isinstance(review, dict) else {}),
             }),
             created_at=now, expires_at=now + timedelta(seconds=expires_in_seconds),
         )

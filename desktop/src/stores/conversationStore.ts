@@ -26,7 +26,6 @@ import { mergeProjectionById } from "./conversationProjection";
 import {
   buildConversationLlmPayload,
   getStoredApiConfig,
-  type ConversationLlmPayload,
 } from "../lib/llmConfig";
 import { getUserErrorMessage } from "../lib/api/client";
 import type {
@@ -292,7 +291,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     idempotencyKey,
     references = [],
   ) => {
-    const llmPayload = requireConversationLlmPayload();
+    const llmPayload = buildConversationLlmPayload(getStoredApiConfig());
     const detail = get().detailById[conversationId]
       || await get().openConversation(conversationId);
     const created = await admitConversationInput(conversationId, {
@@ -317,9 +316,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
         })),
       } : {}),
       selected_artifact_ids: detail.selected_artifact_id ? [detail.selected_artifact_id] : [],
-      llm_credential_id: llmPayload.llm_credential_id,
-      api_base: llmPayload.api_base,
-      model_name: llmPayload.model_name,
+      ...llmPayload,
       workspace_context: {
         recent_agent_run_id: detail.runs.at(-1)?.id || null,
       },
@@ -421,14 +418,6 @@ async function followRun(
       },
     })),
   });
-}
-
-function requireConversationLlmPayload(): ConversationLlmPayload & { llm_credential_id: string } {
-  const payload = buildConversationLlmPayload(getStoredApiConfig());
-  if (!payload.llm_credential_id) {
-    throw new Error("请先配置模型后再开始智能分析。");
-  }
-  return payload as ConversationLlmPayload & { llm_credential_id: string };
 }
 
 function findItem<T extends ConversationRunItem>(

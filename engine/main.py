@@ -57,9 +57,10 @@ from engine.diagnostics.logs import configure_diagnostic_logging
 from engine.dlc.errors import DlcError
 from engine.errors import DBFoxError, NotFoundError
 from engine.engine_runtime.credentials import RuntimeCredentialPolicy
+from engine.llm.local_model import ManagedLocalModel
 from engine.problem_details import REQUEST_ID_HEADER, new_request_id, problem_response
 from engine.schemas import ProblemDetails
-from engine.runtime_paths import private_runtime_file
+from engine.runtime_paths import private_runtime_file, private_runtime_root
 
 # 创建当前模块的日志记录器
 logger = logging.getLogger("dbfox.main")
@@ -122,6 +123,11 @@ ALLOWED_DESKTOP_ORIGINS = {
 async def lifespan(application: FastAPI) -> Any:
     """Initialize durable runtime services and stop them in dependency order."""
     agent_coordinator: SessionCoordinator | None = None
+    base_snapshot = None
+    local_execution = None
+    local_model = None
+    from engine.runtime_composition import compose_local_execution, set_active_runtime_snapshot
+
     startup_stage = "migrating"
     try:
         _emit_startup_stage(startup_stage)
@@ -131,7 +137,12 @@ async def lifespan(application: FastAPI) -> Any:
 
         startup_stage = "bootstrapping"
         _emit_startup_stage(startup_stage)
-        runtime_snapshot = get_active_runtime_snapshot()
+        base_snapshot = get_active_runtime_snapshot()
+        runtime_snapshot, local_execution = compose_local_execution(base_snapshot, SessionLocal)
+        set_active_runtime_snapshot(runtime_snapshot)
+        application.state.local_execution = local_execution
+        local_model = ManagedLocalModel(private_runtime_root() / "local-model.json")
+        application.state.local_model = local_model
         reconcile_credential_leases(
             SessionLocal,
             reference_probes=default_credential_reference_probes(runtime_snapshot),
@@ -170,6 +181,7 @@ async def lifespan(application: FastAPI) -> Any:
                 session_factory=SessionLocal,
                 snapshot=runtime_snapshot,
                 workbench_presentations=workbench_presentations,
+                local_model=local_model,
             ),
         )
         agent_coordinator.start()
@@ -187,6 +199,13 @@ async def lifespan(application: FastAPI) -> Any:
         _emit_startup_fatal(startup_stage, exc)
         if agent_coordinator is not None:
             agent_coordinator.stop()
+        if local_execution is not None:
+            local_execution.close()
+        if local_model is not None:
+            local_model.close()
+        application.state.local_model = None
+        application.state.local_execution = None
+        set_active_runtime_snapshot(base_snapshot)
         application.state.agent_coordinator = None
         application.state.workbench_presentations = None
         raise
@@ -198,6 +217,13 @@ async def lifespan(application: FastAPI) -> Any:
         yield
     finally:
         agent_coordinator.stop()
+        if local_execution is not None:
+            local_execution.close()
+        if local_model is not None:
+            local_model.close()
+        application.state.local_model = None
+        application.state.local_execution = None
+        set_active_runtime_snapshot(base_snapshot)
         application.state.agent_coordinator = None
         application.state.workbench_presentations = None
         from engine.llm.http_clients import close_llm_http_clients

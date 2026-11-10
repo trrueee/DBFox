@@ -9,10 +9,12 @@ import subprocess
 import tempfile
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+
+from dbfox_dlc_api import ToolInputError
 
 MAX_WORKSPACE_FILE_BYTES = 1024 * 1024
 MAX_WORKSPACE_DIR_ENTRIES = 600
@@ -53,7 +55,7 @@ _COMMAND_ENV_ALLOWLIST = frozenset({
 
 
 class WorkspaceError(ValueError):
-    pass
+    """Workspace failure with a public message that excludes raw OS errors."""
 
 
 class WorkspaceConflict(WorkspaceError):
@@ -109,8 +111,15 @@ class CommandRunResult:
 
 
 class WorkspaceService:
-    def __init__(self, root: str | Path, *, mutation_database: Path) -> None:
+    def __init__(
+        self,
+        root: str | Path,
+        *,
+        mutation_database: Path,
+        check_binding: Callable[[sqlite3.Connection], None] | None = None,
+    ) -> None:
         self._mutation_database = mutation_database
+        self._check_binding = check_binding
         try:
             self.root = Path(root).expanduser().resolve(strict=True)
         except OSError as exc:
@@ -128,21 +137,31 @@ class WorkspaceService:
         if not value:
             return "."
         if value.startswith("/") or (len(value) > 1 and value[1] == ":"):
-            raise WorkspaceError("Workspace path must be relative")
+            raise WorkspaceError(
+                "Use a path relative to the bound project, such as src/main.py. "
+                "Use . or an empty directory path for the project root."
+            )
+        if "\0" in value:
+            raise WorkspaceError("Workspace paths cannot contain a NUL character.")
         parts: list[str] = []
         for part in value.split("/"):
             if part in {"", "."}:
                 continue
             if part == "..":
-                raise WorkspaceError("Workspace path must not contain '..'")
+                raise WorkspaceError("Workspace paths must not contain '..'. Search from . to locate the target.")
             parts.append(part)
         return "/".join(parts) if parts else "."
 
     def resolve(self, relative_path: str) -> Path:
-        normalized = self.normalize(relative_path)
-        candidate = (self.root / normalized).resolve(strict=False)
-        if candidate != self.root and not candidate.is_relative_to(self.root):
-            raise WorkspaceError("Workspace path escapes the authorized root")
+        return self._resolve_inside(self.root / self.normalize(relative_path))
+
+    def _resolve_inside(self, path: Path) -> Path:
+        try:
+            candidate = path.resolve(strict=False)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise WorkspaceError("The project path could not be resolved. Search from . to locate the target.") from exc
+        if not candidate.is_relative_to(self.root):
+            raise WorkspaceError("The path resolves outside the bound project. Use a path found inside the project.")
         return candidate
 
     def _entry_path(self, relative_path: str) -> Path:
@@ -151,10 +170,7 @@ class WorkspaceService:
         if normalized == ".":
             return self.root
         entry = self.root / normalized
-        parent = entry.parent.resolve(strict=False)
-        if not parent.is_relative_to(self.root):
-            raise WorkspaceError("Workspace path escapes the authorized root")
-        return parent / entry.name
+        return self._resolve_inside(entry.parent) / entry.name
 
     @contextmanager
     def _mutation(self) -> Iterator[None]:
@@ -167,33 +183,61 @@ class WorkspaceService:
                 connection.execute("BEGIN IMMEDIATE")
             except sqlite3.OperationalError as exc:
                 raise WorkspaceError("Workspace is busy; retry the operation") from exc
+            if self._check_binding is not None:
+                self._check_binding(connection)
             yield
         finally:
             connection.rollback()
             connection.close()
 
-    def list_directory(self, relative_path: str = "") -> WorkspaceDirectory:
+    @contextmanager
+    def execution_directory(self, relative_path: str) -> Iterator[Path]:
+        """Hold the binding writer lock through process creation, never while it runs."""
+        if self._check_binding is None:
+            raise WorkspaceError("Execution requires a resolved Workspace resource")
+        with self._mutation():
+            yield self.command_directory(relative_path)
+
+    def command_directory(self, relative_path: str) -> Path:
+        try:
+            return self._resolve_directory(relative_path)
+        except WorkspaceError as exc:
+            raise ToolInputError(str(exc)) from exc
+
+    def _resolve_directory(self, relative_path: str) -> Path:
         directory = self.resolve(relative_path)
-        if not directory.exists() or not directory.is_dir():
-            raise WorkspaceError("Workspace directory does not exist")
+        if not directory.is_dir():
+            raise WorkspaceError(
+                "The path must name an existing directory inside the bound project. "
+                "Use . or leave the directory path empty for the project root."
+            )
+        return directory
+
+    def list_directory(self, relative_path: str = "") -> WorkspaceDirectory:
+        directory = self._resolve_directory(relative_path)
+        parent = self.normalize(relative_path)
         scanned = 0
+        incomplete = False
         candidates: list[WorkspaceEntry] = []
-        with os.scandir(directory) as iterator:
-            for item in iterator:
-                scanned += 1
-                if scanned > MAX_WORKSPACE_DIR_SCAN_ENTRIES:
-                    break
-                try:
-                    is_dir = item.is_dir(follow_symlinks=False) or (
-                        item.is_symlink() and Path(item.path).resolve(strict=True).is_dir()
-                    )
-                except OSError:
-                    continue
-                if is_dir and item.name in _SKIPPED_DIR_NAMES:
-                    continue
-                parent = self.normalize(relative_path)
-                child = item.name if parent == "." else f"{parent}/{item.name}"
-                candidates.append(WorkspaceEntry(item.name, child, is_dir))
+        try:
+            with os.scandir(directory) as iterator:
+                for item in iterator:
+                    scanned += 1
+                    if scanned > MAX_WORKSPACE_DIR_SCAN_ENTRIES:
+                        break
+                    try:
+                        is_dir = item.is_dir(follow_symlinks=False) or (
+                            item.is_symlink() and Path(item.path).resolve(strict=True).is_dir()
+                        )
+                    except (OSError, RuntimeError):
+                        incomplete = True
+                        continue
+                    if is_dir and item.name in _SKIPPED_DIR_NAMES:
+                        continue
+                    child = item.name if parent == "." else f"{parent}/{item.name}"
+                    candidates.append(WorkspaceEntry(item.name, child, is_dir))
+        except OSError as exc:
+            raise WorkspaceError("The project directory could not be read. Check its availability and permissions.") from exc
         entries = heapq.nsmallest(
             MAX_WORKSPACE_DIR_ENTRIES,
             candidates,
@@ -202,15 +246,16 @@ class WorkspaceService:
         return WorkspaceDirectory(
             entries=tuple(entries),
             truncated=(
-                scanned > MAX_WORKSPACE_DIR_SCAN_ENTRIES
+                incomplete
+                or scanned > MAX_WORKSPACE_DIR_SCAN_ENTRIES
                 or len(candidates) > MAX_WORKSPACE_DIR_ENTRIES
             ),
         )
 
     def read_text_file(self, relative_path: str) -> WorkspaceFile:
         path = self.resolve(relative_path)
-        if not path.exists() or not path.is_file():
-            raise WorkspaceError("Workspace file does not exist")
+        if not path.is_file():
+            raise WorkspaceError("The path must name an existing project file. Search from . and reuse a returned file path.")
         try:
             size = path.stat().st_size
             if size > MAX_WORKSPACE_FILE_BYTES:
@@ -240,7 +285,10 @@ class WorkspaceService:
     def search_files(self, query: str, *, path_prefix: str = "", limit: int = 20) -> WorkspaceDirectory:
         if not 1 <= limit <= 100:
             raise WorkspaceError("Search limit must be between 1 and 100")
-        directory = self.list_directory(path_prefix) if not query else self._scan_tree(self.resolve(path_prefix))
+        directory = (
+            self._scan_tree(self._resolve_directory(path_prefix))
+            if query else self.list_directory(path_prefix)
+        )
         needle = query.casefold()
         matches = heapq.nsmallest(
             limit + 1,
@@ -386,9 +434,12 @@ class WorkspaceService:
         if not query:
             raise WorkspaceError("Search query must not be empty")
         start = self.resolve(path_prefix)
-        if not start.exists():
-            raise WorkspaceError("Search path does not exist")
-        directory = None if start.is_file() else self._scan_tree(start)
+        if start.is_file():
+            directory = None
+        elif start.is_dir():
+            directory = self._scan_tree(start)
+        else:
+            raise WorkspaceError("The search scope must be an existing project file or directory. Use . to search the project.")
         candidates: Iterator[Path] = iter((start,)) if directory is None else (
             self.root / entry.relative_path for entry in directory.entries if not entry.is_dir
         )
@@ -447,9 +498,7 @@ class WorkspaceService:
             raise WorkspaceError("Command argv must contain non-empty strings")
         if not 1 <= timeout_seconds <= MAX_COMMAND_TIMEOUT_SECONDS:
             raise WorkspaceError("Command timeout must be between 1 and 300 seconds")
-        command_cwd = self.resolve(cwd)
-        if not command_cwd.is_dir():
-            raise WorkspaceError("Command cwd is not a workspace directory")
+        command_cwd = self._resolve_directory(cwd)
         started = time.monotonic()
         timed_out = False
         exit_code: int | None = None
@@ -517,8 +566,6 @@ class WorkspaceService:
 
     def _scan_tree(self, start: Path) -> WorkspaceDirectory:
         """Bound all entries, including empty directories, before reading content."""
-        if not start.is_dir():
-            raise WorkspaceError("Search directory does not exist")
         pending = [start]
         entries: list[WorkspaceEntry] = []
         scanned = 0

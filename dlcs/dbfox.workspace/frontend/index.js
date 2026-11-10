@@ -50,7 +50,7 @@ function openFile(projectId, binding, path) {
     stateKey,
     target: {
       type: "object",
-      object: { kind: "dbfox.workspace.file", id: path, version: binding.root_digest },
+      object: { kind: "dbfox.workspace.file", id: path, version: binding.binding_generation },
       authority: { kind: "dbfox.workspace.root", id: binding.id },
       locator: path,
     },
@@ -127,7 +127,7 @@ function FileBrowser({ projectId, binding, path, selectedPath, refreshKey }) {
       .then((result) => { if (!controller.signal.aborted) { setEntries(result?.entries || []); setTruncated(Boolean(result?.truncated)); setStatus("ready"); } })
       .catch(() => !controller.signal.aborted && setStatus("error"));
     return () => controller.abort();
-  }, [projectId, binding.root_digest, path, reloadKey, refreshKey]);
+  }, [projectId, binding.binding_generation, path, reloadKey, refreshKey]);
   const rootItem = React.useMemo(() => ({ path: `__root__:${path}`, name: "", is_dir: true, children: entries }), [path, entries]);
   return React.createElement("div", { className: "dbfox-workspace__files" },
     truncated ? React.createElement("p", { className: "dbfox-workspace__status", role: "status" }, "目录过大，当前仅显示部分条目。") : null,
@@ -139,7 +139,7 @@ function FileBrowser({ projectId, binding, path, selectedPath, refreshKey }) {
       ? React.createElement("p", { className: "dbfox-workspace__status" }, "这个目录是空的。") : null,
     status === "ready" && entries.length > 0
       ? React.createElement(host.ui.Tree, {
-          key: `${binding.root_digest}:${reloadKey}:${refreshKey}`,
+          key: `${binding.binding_generation}:${reloadKey}:${refreshKey}`,
           rootItem,
           ariaLabel: path ? `工作区目录 ${path}` : "工作区目录",
           getItemId: (entry) => entry.path,
@@ -170,7 +170,7 @@ function FilePreview({ view, context, binding, bindingReady, refreshKey }) {
       path: view.target.locator,
       binding: {
         id: view.target.authority.id,
-        root_digest: view.target.object.version,
+        binding_generation: view.target.object.version,
       },
     } : null;
   const [result, setResult] = React.useState(null);
@@ -182,7 +182,7 @@ function FilePreview({ view, context, binding, bindingReady, refreshKey }) {
     if (!state || !bindingReady) return;
     setError("");
     setReadingMore(false);
-    if (state.binding.id !== binding.id || state.binding.root_digest !== binding.root_digest) {
+    if (state.binding.id !== binding.id || state.binding.binding_generation !== binding.binding_generation) {
       setResult(null);
       setError("项目文件夹已变化，请从文件树重新选择文件。");
       return;
@@ -198,7 +198,7 @@ function FilePreview({ view, context, binding, bindingReady, refreshKey }) {
       controller.abort();
       if (readController.current === controller) readController.current = null;
     };
-  }, [state?.projectId, state?.path, state?.binding?.root_digest, binding.id, binding.root_digest, bindingReady, refreshKey]);
+  }, [state?.projectId, state?.path, state?.binding?.binding_generation, binding.id, binding.binding_generation, bindingReady, refreshKey]);
   if (!state) return React.createElement("p", null, "文件状态不可用。");
   if (!result) return React.createElement("p", { className: error ? "dbfox-workspace__error" : "dbfox-workspace__status", role: error ? "alert" : "status" }, error || "正在读取文件…");
   const loadedCharacters = Array.from(result.content).length;
@@ -206,7 +206,7 @@ function FilePreview({ view, context, binding, bindingReady, refreshKey }) {
   return React.createElement("article", { className: "dbfox-workspace-file", "aria-busy": refreshing || undefined },
     refreshing ? React.createElement("p", { className: "dbfox-workspace__status", role: "status" }, "正在读取最新内容…") : null,
     React.createElement(host.ui.FileContent, { name: state.path, content: result.content,
-      onAsk: context?.onAsk ? () => context.onAsk({ label: state.path.split("/").pop(), authority: { kind: "dbfox.workspace.root", id: state.binding.id }, object: { kind: "dbfox.workspace.file", id: state.path, version: state.binding.root_digest }, locator: state.path }) : undefined }),
+      onAsk: context?.onAsk ? () => context.onAsk({ label: state.path.split("/").pop(), authority: { kind: "dbfox.workspace.root", id: state.binding.id }, object: { kind: "dbfox.workspace.file", id: state.path, version: state.binding.binding_generation }, locator: state.path }) : undefined }),
     error ? React.createElement("p", { className: "dbfox-workspace__error", role: "alert" }, error) : null,
     result.content_truncated ? React.createElement("div", { className: "dbfox-workspace__read-more" },
       React.createElement("span", null, `已显示 ${loadedCharacters.toLocaleString()} 字符`),

@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import {
   FileTextIcon,
   SparkleIcon,
+  TerminalWindowIcon,
 } from "@/components/icons";
 import { LoadingState } from "../../components/ui";
 import { useConversationStore } from "../../stores/conversationStore";
@@ -19,6 +20,9 @@ const ArtifactDockContent = lazy(() =>
 const ArtifactsDockContent = lazy(() =>
   import("./dockViewContent").then((module) => ({ default: module.ArtifactsDockContent })),
 );
+const ExecutionJobsDock = lazy(() =>
+  import("./ExecutionJobsDock").then((module) => ({ default: module.ExecutionJobsDock })),
+);
 
 function ArtifactTabIcon({ view }: { view: WorkspaceDockTab }) {
   const artifactId = view.target?.type === "artifact" ? view.target.id : undefined;
@@ -28,6 +32,18 @@ function ArtifactTabIcon({ view }: { view: WorkspaceDockTab }) {
 }
 
 export const coreDockViews: readonly DockViewContribution[] = [
+  {
+    viewType: CORE_DOCK_VIEW_TYPES.execution,
+    preferredWidth: 430,
+    icon: () => <TerminalWindowIcon {...iconProps} />,
+    resolveTitle: (view) => view.title,
+    isVisible: (view, context) => view.target?.type === "conversation" && view.target.id === context.activeConversationId,
+    render: (view) => (
+      <Suspense fallback={<LoadingState label="正在载入运行输出" />}>
+        <ExecutionJobsDock key={view.viewKey} conversationId={view.sessionId ?? ""} jobId={view.stateKey} />
+      </Suspense>
+    ),
+  },
   {
     viewType: CORE_DOCK_VIEW_TYPES.projectWorkbench,
     preferredWidth: 560,

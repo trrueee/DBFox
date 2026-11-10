@@ -160,4 +160,4 @@ def test_worker_and_engine_startup_use_product_composition_root() -> None:
     assert "build_product_tool_registry()" in worker_source
     assert "build_attempt_resource_resolver()" in worker_source
     assert "register_" not in worker_source
-    assert "build_product_run_loop(session_factory=SessionLocal)" in main_source
+    assert "run_loop=build_product_run_loop(" in main_source

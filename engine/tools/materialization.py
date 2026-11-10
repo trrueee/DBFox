@@ -62,8 +62,18 @@ class ToolMaterialization(BaseModel):
     tools: tuple[MaterializedTool, ...] = ()
     hash: str
 
-    def provider_schemas(self) -> list[dict[str, Any]]:
-        return [tool.provider_schema() for tool in self.tools]
+    def provider_schemas(self, *, declared_inputs: ToolRegistry | None = None) -> list[dict[str, Any]]:
+        """Render provider inputs without changing the durable execution contract."""
+        if declared_inputs is None:
+            return [tool.provider_schema() for tool in self.tools]
+        return [
+            {
+                **tool.provider_schema(),
+                "parameters": declared_inputs.require(tool.name).spec.input_schema,
+                "strict": False,
+            }
+            for tool in self.tools
+        ]
 
     def require(self, name: str) -> MaterializedTool:
         for tool in self.tools:

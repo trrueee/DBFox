@@ -134,6 +134,7 @@ def test_unknown_provider_tool_is_durably_rejected_without_failing_the_run(
     assert db_session.query(AgentObservationRecord).count() == 1
     invocation = db_session.query(AgentToolInvocation).one()
     assert invocation.input_json == "{}"
+    assert dispatcher.tool_budget_usage(db_session, admission.run_id) == 0
     assert db_session.get(AgentRun, admission.run_id).status == "running"
 
 

@@ -77,7 +77,9 @@ flowchart TB
 | Typed API Client | token、错误映射、AbortSignal、SSE | request DTO | response/event DTO | 无 | 静默 fallback、业务重试 |
 | API Middleware | loopback 安全、输入限制、错误边界 | HTTP | 安全 response | 无 | 返回秘密/异常原文 |
 | Data System DLC | ConnectionProfile/DatabaseResource、Catalog、SQL safety/execution、Result view、Backup | typed operation + frozen ResourceRef | Data resources/artifacts/views | `dbfox.data/state.sqlite3` + vault refs | 向 Core 泄露 SQL/连接领域状态 |
-| Workspace System DLC | workspace binding、路径 containment、file read/write/edit/grep、受批准确认的 argv command | Project binding + frozen `dbfox.workspace.root` | file/patch artifacts、bounded command result、dock views | `dbfox.workspace/state.sqlite3` + 用户绑定目录 | 把 workspace root 写回 Project、执行 shell 字符串 |
+| Workspace System DLC | workspace binding、路径 containment、file read/write/edit/grep | Project binding + frozen `dbfox.workspace.root` | file/patch artifacts、dock views | `dbfox.workspace/state.sqlite3` + 用户绑定目录 | 把 workspace root 写回 Project |
+| [本机开发执行](local-development-execution.md) | Windows 进程树监督、stdin、增量日志与执行证据 | 已批准的 Tool Invocation + Workspace 绑定代次 | Job、执行 Artifact、Dock 日志与停止 | Sidecar 元数据 SQLite + 当前进程句柄 | 重放非幂等启动、把目录边界当作系统隔离 |
+| [本地模型](local-model.md) | Ollama 安装、模型选择和推理生命周期 | 私有本机配置 + Run 模型摘要 | Responses 流和本地模型状态 | Sidecar + 模型存储盘 | 从本地模式自动回退云端、由 Renderer 选择本机运行端口 |
 | Story System DLC | 故事实体/关系/修订、Markdown 章节、版本历史与一致性完成约束 | frozen `dbfox.story.world` | 章节、确认事实、关系提案 | `dbfox.story/state.sqlite3` + private chapter Markdown | 读取待审/否决关系作为事实、跨 DLC 私取 Workspace resolver |
 | Music System DLC | Score/Audio Resource、不可变 Revision、作曲/转录 Tools、Piano Studio | Project + frozen Music ResourceRef | score/audio artifacts、notation/playback | `dbfox.music/state.sqlite3` + private audio | 向 Core 泄露 Note/Score/Piano 概念 |
 | Extension Runtime / Public SDK | 签名包校验、装载、贡献快照、Host 注册入口、API v2 与前端注入合同 | manifest + verified package + public contribution | owner-bound Tool/Resource/View contributions | installed registry + frozen runtime snapshot | 领域规则、跨 DLC 私有调用、第二套 Loop |
@@ -127,6 +129,7 @@ App Shell 组织文件夹项目与对话、固定 Main Surface、Dock registry�
 - `ProjectCreateForm` 打开 native canonical folder，以文件夹名创建/复用项目。opaque idempotency key 防止重复项目；路径仍只归 Workspace binding。不同路径可有相同项目名，迁移仅放开 name 唯一约束。
 - `dlcs/dbfox.workspace/frontend/index.js` 通过原有 `binding.get/create`、`files.list/read` 操作提供文件树与只读内容；有界目录/文本与 containment 校验保持在 owner 后端。过大目录明确显示部分结果，嵌套 lazy ancestors 用 Host Tree 加载。
 - Workspace 文件成果通过 owner 的 `backend/representation.py` 校验冻结来源、绑定版本和 hash 后分页读取，复用 Host FileContent；`file_search` 空 query 浏览一层、非空 query 递归查找，与 grep 共用目录项总量预算。
+- Workspace 的绑定目录是文件、搜索与命令共用的路径基准。目录参数留空或使用 `.` 指向项目根，返回的文件路径可直接用于后续操作。名称搜索的 `path_prefix` 选择目录，内容搜索也接受单个文件。路径拒绝由 owner 返回可修正的原因，Tool Observation 与文件操作 API 共用该反馈。目录解析复用 Python 的规范路径与包含关系校验，搜索作用域的设计参考 VS Code 的项目目录约束。[Python pathlib](https://docs.python.org/3.12/library/pathlib.html#pathlib.Path.resolve) · [VS Code RelativePattern](https://code.visualstudio.com/api/references/vscode-api#RelativePattern)
 - Workspace 写入前置条件统一在 `WorkspaceService`；无 hash 只能新建，覆盖在暂存完成后校验 hash，工具与 public operation 共用固定冲突，后者返回 409。Dock 直接使用规范 target，显式刷新目录与当前文件，并取消旧读取；分页冲突不拼接新版本。验证见 `test_workspace_mutation_safety.py`、`test_dbfox_workspace_dlc_package.py` 与 `dbfoxWorkspaceFixture.test.ts`。
 - `components/resources/ReferenceCard` / `ResourceIcon` 统一消息、输入框和结果引用；`FileContent` 复用 CodeMirror 官方 grammar 与已有 Markdown renderer，支持预览/源码/分栏。
 - `features/resources/openWorkbenchReference` 优先回到当前 scope 内唯一可见的对象页签，新建页签时使用 `DockViewContribution.objectKinds`。附件和工件沿用各自的导航入口。

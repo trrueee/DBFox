@@ -8,6 +8,8 @@ from engine.representation import ArtifactRepresentationDescriptor
 from engine.tools.runtime import ToolRegistry
 
 if TYPE_CHECKING:
+    from engine.dlc.snapshot import ToolContribution
+    from engine.local_execution.broker import LocalExecutionBroker
     from engine.workbench_presentations import WorkbenchPresentationBroker
 
 CORE_OWNER = "dbfox.core"
@@ -61,3 +63,26 @@ def register_workbench_open(registry: ToolRegistry, broker: WorkbenchPresentatio
 
     tool = OpenArtifactTool(broker)
     registry.register(tool, owner="dbfox.workbench", provider_name=tool.name)
+
+
+def local_execution_contributions(
+    broker: LocalExecutionBroker, legacy: ToolContribution,
+) -> tuple[ToolContribution, ...]:
+    from engine.dlc.snapshot import ToolContribution
+    from engine.local_execution.tools import (
+        CommandEnvironment, CommandInspect, CommandResult, CommandStart, CommandStdin, CommandStop, bind_command_run,
+    )
+
+    return (
+        ToolContribution(
+            bind_command_run(broker, legacy.tool), legacy.owner_id, legacy.package_digest, legacy.provider_name,
+            host_supervised_process=True,
+        ),
+        *(ToolContribution(
+            tool, legacy.owner_id, legacy.package_digest,
+            host_supervised_process="subprocess" in tool.execution.capabilities,
+        ) for tool in (
+            CommandEnvironment(broker), CommandStart(broker), CommandInspect(broker),
+            CommandStdin(broker), CommandStop(broker), CommandResult(broker),
+        )),
+    )

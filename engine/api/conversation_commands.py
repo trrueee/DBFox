@@ -35,6 +35,7 @@ from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.json_codec import loads as json_loads
 from engine.llm.config import LlmConfigurationError, normalize_product_llm_preferences
+from engine.llm.local_model import ManagedLocalModel
 from engine.models import AgentRun, AgentRunItemRecord, AgentSession, Project, ConversationAttachment, SessionResourceRetirement
 from engine.runtime_composition import authorize_project_resources
 from engine.runtime_composition import authorize_conversation_resources
@@ -249,25 +250,34 @@ def admit_conversation_input(
             detail={"code": "INVALID_RESOURCE_REQUEST", "message": str(exc)},
         ) from exc
 
+    local_model: ManagedLocalModel | None = getattr(request.app.state, "local_model", None)
     try:
-        preferences = normalize_product_llm_preferences(
-            llm_credential_id=payload.llm_credential_id,
-            api_base=payload.api_base,
-            model_name=payload.model_name,
-        )
+        llm_payload = {"content": payload.content, "delivery_mode": payload.delivery_mode.value}
+        if local_model is not None and local_model.configured:
+            profile = local_model.require_profile()
+            credential_id = None
+            api_base = None
+            model_name = profile.model_name
+            llm_payload["model_digest"] = profile.model_digest
+        else:
+            preferences = normalize_product_llm_preferences(
+                llm_credential_id=payload.llm_credential_id,
+                api_base=payload.api_base,
+                model_name=payload.model_name,
+            )
+            credential_id = payload.llm_credential_id
+            api_base = preferences.api_base
+            model_name = preferences.model_name
         admission = SessionRepository(db).admit(
             session_id=conversation_id,
             resource_refs=tuple(resource_refs),
             references=tuple(payload.references),
             content=payload.content,
             idempotency_key=payload.idempotency_key,
-            llm_credential_id=payload.llm_credential_id,
-            api_base=preferences.api_base,
-            model_name=preferences.model_name,
-            request_payload={
-                "content": payload.content,
-                "delivery_mode": payload.delivery_mode.value,
-            },
+            llm_credential_id=credential_id,
+            api_base=api_base,
+            model_name=model_name,
+            request_payload=llm_payload,
             delivery_mode=payload.delivery_mode,
             selected_artifact_ids=payload.selected_artifact_ids,
             workspace_context=payload.workspace_context,
@@ -291,7 +301,7 @@ def admit_conversation_input(
     except LlmConfigurationError as exc:
         db.rollback()
         raise HTTPException(
-            status_code=400,
+            status_code=503 if local_model is not None and local_model.configured else 400,
             detail=fixed_error_detail(exc.code),
         ) from None
     except ValueError:

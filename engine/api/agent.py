@@ -4,17 +4,20 @@ from __future__ import annotations
 
 import logging
 import time as _time
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from openai import APIStatusError
 
 from engine.app.safe_errors import (
     SafeLogOperation,
+    fixed_error_detail,
     log_unexpected_exception,
 )
-from engine.llm.config import DEFAULT_LLM_MODEL_NAME, resolve_product_llm_config_from_credential
+from engine.agent.turn import ModelStreamTimeouts, TurnStreamAssembler, TurnStreamError
+from engine.llm.config import DEFAULT_LLM_MODEL_NAME, LlmConfigurationError, resolve_product_llm_config_from_credential
+from engine.llm.local_model import ManagedLocalModel
 from engine.llm.providers.openai import classify_openai_status_error, create_openai_responses_client
 from engine.api.agent_results import router as result_router
 
@@ -61,12 +64,87 @@ class LlmModelsResponse(BaseModel):
     error_message: str | None = None
 
 
+class LocalModelStatus(BaseModel):
+    mode: Literal["local", "remote"]
+    model: str | None = None
+    models_dir: str | None = None
+    model_size_bytes: int | None = None
+    context_length: int | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+class LocalModelTestResponse(BaseModel):
+    ok: bool
+    latency_ms: int
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+def _local_model(request: Request) -> ManagedLocalModel | None:
+    return getattr(request.app.state, "local_model", None)
+
+
+def _require_cloud_mode(request: Request) -> None:
+    model = _local_model(request)
+    if model is not None and model.configured:
+        raise HTTPException(status_code=409, detail=fixed_error_detail("LOCAL_MODEL_REQUIRED"))
+
+
+@router.get("/agent/local-model", response_model=LocalModelStatus)
+def api_local_model_status(request: Request) -> LocalModelStatus:
+    model = _local_model(request)
+    if model is None or not model.configured:
+        return LocalModelStatus(mode="remote")
+    profile = model.profile
+    error = model.installation_error()
+    return LocalModelStatus(
+        mode="local",
+        model=profile.model_name if profile else None,
+        models_dir=str(profile.models_dir) if profile else None,
+        model_size_bytes=profile.model_size_bytes if profile else None,
+        context_length=profile.context_length if profile else None,
+        error_code=error,
+        error_message=fixed_error_detail(error)["message"] if error else None,
+    )
+
+
+@router.post("/agent/local-model/test", response_model=LocalModelTestResponse)
+def api_local_model_test(request: Request) -> LocalModelTestResponse:
+    started = _time.monotonic()
+    error = None
+    try:
+        model = _local_model(request)
+        if model is None:
+            raise LlmConfigurationError("Local model missing", code="LOCAL_MODEL_NOT_CONFIGURED")
+        result = TurnStreamAssembler().consume(model.adapter().stream(
+            messages=[{"role": "user", "content": "只用中文回复：本地模型已就绪"}],
+            tools=[],
+            stream_timeouts=ModelStreamTimeouts(
+                turn_seconds=120,
+                request_seconds=90,
+                first_event_seconds=60,
+                idle_seconds=60,
+            ),
+        ))
+        if not result.answer_text:
+            error = "MODEL_PROVIDER_INCOMPLETE"
+    except (LlmConfigurationError, TurnStreamError) as exc:
+        error = exc.code
+    return LocalModelTestResponse(
+        ok=error is None,
+        latency_ms=int((_time.monotonic() - started) * 1000),
+        error_code=error,
+        error_message=fixed_error_detail(error)["message"] if error else None,
+    )
+
+
 def _probe_llm_service(*, client: Any, model_name: str) -> None:
     """Check the same native Responses endpoint used by the Agent runtime."""
     client.responses.create(model=model_name, input="ping", max_output_tokens=16, store=False)
 
 
-@router.post("/agent/llm/test", response_model=LlmTestResponse)
+@router.post("/agent/llm/test", response_model=LlmTestResponse, dependencies=[Depends(_require_cloud_mode)])
 def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
     """Test the exact Responses capability required by the Agent runtime.
 
@@ -110,7 +188,7 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
             error_message=failure.message if failure else "模型连接测试未通过，请检查服务地址、凭据和模型名称。",
         )
 
-@router.post("/agent/llm/models", response_model=LlmModelsResponse)
+@router.post("/agent/llm/models", response_model=LlmModelsResponse, dependencies=[Depends(_require_cloud_mode)])
 def api_llm_models(req: LlmModelsRequest) -> LlmModelsResponse:
     """List the models an OpenAI-compatible endpoint currently exposes.
 

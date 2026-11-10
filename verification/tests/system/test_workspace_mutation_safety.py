@@ -5,10 +5,12 @@ import importlib
 import multiprocessing
 import os
 from pathlib import Path
+import sqlite3
 import sys
 from types import ModuleType
 
 import pytest
+from dbfox_dlc_api import ToolInputError
 
 
 def _modules():
@@ -29,6 +31,40 @@ def workspace(tmp_path):
     store.create_binding("project", str(root))
     ref = store.list_resources("project")[0].to_scope_ref()
     return root, store, ref, service_module
+
+
+def test_existing_workspace_binding_keeps_its_scope_until_revoked(tmp_path):
+    store_module, service_module = _modules()
+    state = tmp_path / "state"
+    state.mkdir()
+    root = tmp_path / "project"
+    root.mkdir()
+    path = state / "state.sqlite3"
+    service = service_module.WorkspaceService(root, mutation_database=path)
+    db = sqlite3.connect(path)
+    try:
+        with db:
+            db.execute("""
+                CREATE TABLE workspace_bindings (
+                    id TEXT PRIMARY KEY, project_id TEXT NOT NULL UNIQUE, root_path TEXT NOT NULL,
+                    root_digest TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                )
+            """)
+            db.execute("PRAGMA user_version = 1")
+            db.execute("INSERT INTO workspace_bindings VALUES ('p', 'p', ?, ?, 'legacy', 'legacy')",
+                       (str(root.resolve()), service.root_digest))
+    finally:
+        db.close()
+    store = store_module.WorkspaceBindingStore(state)
+    ref = store.list_resources("p")[0].to_scope_ref()
+    assert ref.version == service.root_digest
+    previous = store.resolve(ref)
+    assert store.delete_binding("p")
+    replacement = store.create_binding("p", str(root))
+    assert replacement.root_digest == ref.version and replacement.binding_generation != ref.version
+    with pytest.raises(ValueError, match="revoked"):
+        with previous.execution_directory(""):
+            pytest.fail("A revoked Workspace reference acquired a launch lease")
 
 
 @pytest.mark.parametrize("operation", ["delete", "move"])
@@ -103,6 +139,26 @@ def test_file_discovery_lists_children_and_searches_nested_paths(workspace):
     limited = service.search_files("pricing", limit=1)
     assert len(limited.entries) == 1
     assert limited.truncated is True
+
+
+def test_directory_scopes_share_root_and_path_errors(workspace):
+    root, store, ref, service_module = workspace
+    (root / "src").mkdir()
+    (root / "src" / "note.txt").write_text("needle", encoding="utf-8")
+    service = store.resolve(ref)
+
+    assert service.command_directory("") == service.command_directory(".") == root.resolve()
+    assert service.list_directory("") == service.list_directory(".")
+    match, = service.search_files("note", path_prefix="./src").entries
+    assert match.relative_path == "src/note.txt"
+    assert service.read_text_file(match.relative_path).content == "needle"
+    assert service.grep_text_files("needle", path_prefix=match.relative_path).matches[0].relative_path == match.relative_path
+
+    with pytest.raises(service_module.WorkspaceError, match="existing directory") as error:
+        service.search_files("note", path_prefix=match.relative_path)
+    with pytest.raises(ToolInputError) as command_error:
+        service.command_directory(match.relative_path)
+    assert str(command_error.value) == str(error.value)
 
 
 def test_search_and_grep_share_a_global_directory_entry_budget(workspace, monkeypatch):

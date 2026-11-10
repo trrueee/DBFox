@@ -485,10 +485,14 @@ class OpenAIModelAdapter:
         client: AsyncOpenAI,
         model_name: str,
         owns_client: bool = False,
+        max_output_tokens: int | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> None:
         self.client = client
         self.model_name = model_name
         self._owns_client = owns_client
+        self._max_output_tokens = max_output_tokens
+        self._extra_body = extra_body
 
     @classmethod
     def from_config(cls, config: LlmConfig) -> "OpenAIModelAdapter":
@@ -530,6 +534,10 @@ class OpenAIModelAdapter:
             request["tool_choice"] = "auto"
             # Approval and question interrupts require one durable call at a time.
             request["parallel_tool_calls"] = False
+        if self._max_output_tokens is not None:
+            request["max_output_tokens"] = self._max_output_tokens
+        if self._extra_body is not None:
+            request["extra_body"] = self._extra_body
         request["timeout"] = max(0.01, stream_timeouts.turn_seconds)
 
         translator = _ResponsesEventTranslator()

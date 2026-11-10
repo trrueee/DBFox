@@ -36,6 +36,7 @@ import type {
 } from "../../types/conversation";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
+import { openExecutionDock } from "../../stores/executionDock";
 
 type ToolGroup = {
   id: string;
@@ -222,6 +223,9 @@ function ToolItem({
   onSelectArtifact?: (artifactId: string) => void;
 }) {
   const status = output?.status || item.status;
+  const jobId = executionJobId(output?.payload.output);
+  const showExecutionLink = jobId && item.payload.name.endsWith("__command_start");
+  const showJobList = !jobId && item.payload.name.endsWith("__command_run");
   return (
     <article className="grid gap-2 py-1 text-sm">
       <header className="flex flex-wrap items-center gap-2 text-xs text-[var(--agent-text-muted)]">
@@ -237,6 +241,12 @@ function ToolItem({
       {output?.payload.summary ? (
         <p className="m-0 whitespace-pre-wrap text-[var(--agent-text-secondary)]">{output.payload.summary}</p>
       ) : null}
+      {showExecutionLink || showJobList ? <div>
+        <Button type="button" variant="ghost" size="sm"
+          onClick={() => openExecutionDock(item.session_id, showExecutionLink ? jobId : undefined)}>
+          <TerminalWindowIcon aria-hidden="true" />{showExecutionLink ? "查看运行输出" : "本机任务"}
+        </Button>
+      </div> : null}
       {output?.payload.error_message || output?.payload.error_code ? (
         <p className="m-0 text-sm text-[var(--color-danger)]" role="alert">
           {output.payload.error_message || output.payload.error_code}
@@ -261,6 +271,16 @@ function ToolItem({
       ) : null}
     </article>
   );
+}
+
+function executionJobId(output?: string): string | undefined {
+  if (!output) return;
+  try {
+    const id: unknown = JSON.parse(output)?.facts?.execution_job_id;
+    return typeof id === "string" && /^job_[0-9a-f]{32}$/.test(id) ? id : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function ToolArguments({ arguments: values }: { arguments: Record<string, unknown> }) {
