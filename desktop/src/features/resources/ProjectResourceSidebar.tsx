@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   WarningCircleIcon,
-  CaretRightIcon,
   PuzzlePieceIcon,
   SidebarSimpleIcon,
   PlusIcon,
@@ -317,8 +316,8 @@ function ProjectGroup({
       <ContextMenu><ContextMenuTrigger asChild><div className="project-group__header" data-active={isActive || undefined}>
         <SidebarNavRow
           className="project-group__name"
-          icon={<CaretRightIcon className="project-group__chevron" data-expanded={expanded} />}
-          label={<span className="project-group__identity"><ResourceIcon kind="folder" expanded={expanded} size={20} /><span>{project.name}</span></span>}
+          icon={<ResourceIcon kind="folder" expanded={expanded} size={20} />}
+          label={project.name}
           aria-current={isActive ? "location" : undefined}
           aria-expanded={expanded}
           onClick={onSelect}
