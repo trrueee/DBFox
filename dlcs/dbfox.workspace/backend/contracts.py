@@ -45,8 +45,8 @@ class PathInput(Contract):
 
 class FileReadInput(Contract):
     path: str = Field(min_length=1, max_length=1024, description=_FILE_PATH)
-    offset: int = Field(default=0, ge=0, le=1_048_576)
-    limit: int = Field(default=12_000, ge=1, le=12_000)
+    offset: int = Field(default=0, ge=0, le=1_048_576, description="Zero-based Unicode character offset, not a line or byte offset. Reuse next_offset for subsequent pages.")
+    limit: int = Field(default=12_000, ge=1, le=12_000, description="Maximum Unicode characters to read, not lines. Omit for small files; content_truncated means more characters remain.")
 
 
 class FileEntry(Contract):
@@ -68,6 +68,7 @@ class FileReadOutput(Contract):
     size_bytes: int = Field(ge=0)
     sha256: str = Field(min_length=64, max_length=64)
     offset: int = Field(default=0, ge=0)
+    next_offset: int = Field(ge=0, description="Use this character offset for the next page when content_truncated is true.")
 
 
 class FileSearchInput(Contract):
@@ -174,6 +175,10 @@ class CommandRunOutput(Contract):
     output: str = Field(max_length=65_536)
     truncated: bool
     output_limit_exceeded: bool = False
+    execution_job_id: str | None = Field(
+        default=None, pattern=r"^job_[0-9a-f]{32}$",
+        description="Managed execution Job reference, when this platform supports Jobs. Use it to inspect and publish execution evidence.",
+    )
 
 
 class WorkspaceFileSnapshotPayload(BaseModel):

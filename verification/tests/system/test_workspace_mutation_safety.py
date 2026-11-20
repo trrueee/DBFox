@@ -33,6 +33,34 @@ def workspace(tmp_path):
     return root, store, ref, service_module
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows execution belongs to the Host Broker")
+def test_windows_workspace_service_cannot_launch_unmanaged_commands(workspace, monkeypatch):
+    _, store, ref, service_module = workspace
+
+    def unmanaged_launch(*args, **kwargs):
+        pytest.fail("Workspace launched a Windows process outside the Host Broker")
+
+    monkeypatch.setattr(service_module.subprocess, "Popen", unmanaged_launch)
+    with pytest.raises(service_module.WorkspaceError, match="Host Broker"):
+        store.resolve(ref).run_command((sys.executable, "-c", "print('unmanaged')"))
+
+
+def test_crlf_edit_mismatch_explains_recovery_and_preserves_untouched_bytes(workspace):
+    root, store, ref, service_module = workspace
+    original = b"def value():\r\n    return 1\r\n"
+    path = root / "value.py"
+    path.write_bytes(original)
+    resource = store.resolve(ref)
+    snapshot = resource.read_text_file("value.py")
+    with pytest.raises(service_module.WorkspaceError, match="CRLF line endings"):
+        resource.edit_text_file("value.py", old_string="def value():\n    return 1",
+                                new_string="def value():\n    return 2", expected_sha256=snapshot.sha256)
+    assert path.read_bytes() == original
+    updated = resource.edit_text_file("value.py", old_string="return 1", new_string="return 2", expected_sha256=snapshot.sha256)
+    assert updated.sha256 != snapshot.sha256
+    assert path.read_bytes() == b"def value():\r\n    return 2\r\n"
+
+
 def test_existing_workspace_binding_keeps_its_scope_until_revoked(tmp_path):
     store_module, service_module = _modules()
     state = tmp_path / "state"

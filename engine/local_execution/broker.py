@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from engine.agent.run import RunStatus, TERMINAL_RUN_STATUSES
 from engine.diagnostics.logs import redact_sensitive_text
 from engine.json_codec import canonical_dumps, load_object
-from engine.local_execution.command import ExecutionError, PreparedCommand, prepare
+from engine.local_execution.command import ExecutionError, LogCursorError, PreparedCommand, prepare
 from engine.local_execution.contracts import (
     ACTIVE_STATES, LOG_CHUNK_BYTES, ExecutionScope, JobPage, JobView, LogLine, StartInput, WorkspaceDirectory,
 )
@@ -205,12 +205,22 @@ class LocalExecutionBroker:
             self._sweep(db)
             job = self._require_job(db, job_id, scope)
             if after > job.last_cursor:
-                raise ExecutionError("The log cursor is beyond the last recorded output.")
+                raise LogCursorError("The log cursor is beyond the last recorded output. Use after=0 or tail=true to resume retained output.")
             floor = job.first_cursor - 1
-            cursor = max(job.last_cursor - limit if tail else after, floor)
+            within_snapshot = (LocalExecutionLog.job_id == job_id, LocalExecutionLog.cursor <= job.last_cursor)
+            if tail:
+                latest = list(db.scalars(select(LocalExecutionLog.cursor).where(
+                    *within_snapshot, func.length(LocalExecutionLog.data) > 0,
+                ).order_by(LocalExecutionLog.cursor.desc()).limit(limit)))
+                cursor = max(latest[-1] - 1 if latest else floor, floor)
+            else:
+                cursor = max(after, floor)
             rows = list(db.scalars(select(LocalExecutionLog).where(
-                LocalExecutionLog.job_id == job_id, LocalExecutionLog.cursor > cursor,
-            ).order_by(LocalExecutionLog.cursor).limit(limit)))
+                *within_snapshot, LocalExecutionLog.cursor > cursor,
+            ).order_by(LocalExecutionLog.cursor).limit(limit + 2 if tail else limit)))
+            stream_ends = dict(db.execute(select(LocalExecutionLog.stream, func.max(LocalExecutionLog.cursor)).where(
+                *within_snapshot,
+            ).group_by(LocalExecutionLog.stream)).all())
             decoders = {}
             chunks = []
             for row in rows:
@@ -218,17 +228,26 @@ class LocalExecutionBroker:
                 if stream not in decoders:
                     decoder = codecs.getincrementaldecoder("utf-8")("replace")
                     if cursor > floor:
-                        prior = db.scalar(select(LocalExecutionLog.data).where(
+                        prior = list(db.scalars(select(LocalExecutionLog.data).where(
                             LocalExecutionLog.job_id == job_id, LocalExecutionLog.stream == stream,
                             LocalExecutionLog.cursor <= cursor,
-                        ).order_by(LocalExecutionLog.cursor.desc()).limit(1))
+                        ).order_by(LocalExecutionLog.cursor.desc()).limit(3)))
                         if prior:
-                            decoder.decode(prior)
+                            # UTF-8 can carry up to three bytes across arbitrarily
+                            # small pipe reads. Priming one row loses that state.
+                            decoder.decode(b"".join(reversed(prior))[-3:])
                     decoders[stream] = decoder
-                chunks.append(LogLine(
-                    cursor=row.cursor, stream=stream,
-                    text=redact_sensitive_text(decoders[stream].decode(row.data)),
-                ))
+                # The collector persists an empty row at each pipe's EOF. It
+                # lets readers flush a pending character after advancing past
+                # earlier bytes, without blocking the independent other pipe.
+                # Terminal legacy Jobs may predate these EOF rows.
+                final = not row.data or (job.state not in ACTIVE_STATES and row.cursor == stream_ends[stream])
+                content = decoders[stream].decode(row.data, final=final)
+                if content:
+                    chunks.append(LogLine(
+                        cursor=row.cursor, stream=stream,
+                        text=redact_sensitive_text(content),
+                    ))
             next_cursor = rows[-1].cursor if rows else cursor
             return JobPage(
                 job=self._view(job), chunks=chunks, next_cursor=next_cursor,
@@ -255,8 +274,12 @@ class LocalExecutionBroker:
             if job_id in self._jobs:
                 self._jobs[job_id].request_stop("invocation_cancelled")
 
-    def write(self, scope: ExecutionScope, job_id: str, text: str, *, close: bool) -> int:
+    def write(
+        self, scope: ExecutionScope, job_id: str, text: str, *, close: bool,
+        is_cancelled: Callable[[], bool] | None = None,
+    ) -> int:
         job = self.get(scope, job_id)
+        resource = self.resolve_workspace(scope.workspace)
         if not job.stdin_open:
             raise ExecutionError("The Job has no open stdin pipe.")
         payload = text.encode("utf-8")
@@ -267,20 +290,30 @@ class LocalExecutionBroker:
             if live is None or live.stop_reason or not live.stdin_lock.acquire(blocking=False):
                 raise ExecutionError("The Job is stopping or already handling a stdin write.")
         completed = Event()
+        started = Event()
         result: list[int] = []
+        errors: list[Exception] = []
 
         def write_pipe() -> None:
             try:
-                fd = live.process.duplicate_stdin()
-                try:
-                    count = os.write(fd, payload) if payload else 0
-                finally:
-                    os.close(fd)
-                if close:
-                    live.process.close_stdin()
-                result.append(count)
-            except OSError:
-                pass
+                # Reuse the owner's existing generation fence. Revocation and
+                # stdin are ordered by the same lock as process creation.
+                with resource.execution_directory(""):
+                    if live.stop_reason or (is_cancelled is not None and is_cancelled()) or self._owner_reason(
+                        live.scope, live.run_id, background=live.background,
+                    ):
+                        raise ExecutionError("The Job or Run is stopping; no stdin was written.")
+                    fd = live.process.duplicate_stdin()
+                    try:
+                        started.set()
+                        count = os.write(fd, payload) if payload else 0
+                    finally:
+                        os.close(fd)
+                    if close:
+                        live.process.close_stdin()
+                    result.append(count)
+            except Exception as exc:
+                errors.append(exc)
             finally:
                 live.stdin_lock.release()
                 completed.set()
@@ -294,6 +327,12 @@ class LocalExecutionBroker:
         if not completed.wait(2):
             live.request_stop("stdin_timeout")
             raise ExecutionError("The process did not accept stdin in time. Stop was requested and input may be partial.")
+        if errors:
+            error = errors[0]
+            if not started.is_set() and isinstance(error, (KeyError, ValueError, OSError)):
+                raise ExecutionError("The Workspace authorization or Run changed; no stdin was written.") from error
+            if not isinstance(error, OSError):
+                raise error
         if not result or result[0] != len(payload):
             raise ExecutionError("The process closed stdin or accepted only part of the write. Inspect before retrying.")
         return result[0]
@@ -382,6 +421,7 @@ class LocalExecutionBroker:
                         data = process.read(stream, LOG_CHUNK_BYTES)
                         if data is None:
                             open_streams.remove(stream)
+                            chunks.append((stream, b""))
                         elif data:
                             chunks.append((stream, data))
                             read = True
@@ -451,7 +491,10 @@ class LocalExecutionBroker:
                 job.retained_bytes = job.total_bytes - oldest.byte_end
             self._sweep(db)
 
-    def _finish(self, job_id, state, reason, root, active, finalized) -> None:
+    def _finish(
+        self, job_id: str, state: str, reason: str | None, root: int | None,
+        active: int | None, finalized: bool,
+    ) -> None:
         with self._sessions() as db, db.begin():
             db.execute(update(LocalExecutionJob).where(
                 LocalExecutionJob.id == job_id, LocalExecutionJob.engine_generation == self.generation,

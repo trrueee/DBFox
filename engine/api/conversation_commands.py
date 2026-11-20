@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy import select
 
 from engine.agent.approval import Approval, ApprovalConflict
@@ -411,13 +412,13 @@ def cancel_run(
     active_coordinator = coordinator(request)
     try:
         run = RunRepository(db).request_cancel(run_id=run_id)
-        running_invocations = ToolInvocationRepository(db).running_invocations_for_run(
-            run_id=run_id,
-        )
-        db.commit()
-    except Exception:
+    except NoResultFound:
         db.rollback()
         raise HTTPException(status_code=404, detail={"code": "RUN_NOT_FOUND"}) from None
+    running_invocations = ToolInvocationRepository(db).running_invocations_for_run(
+        run_id=run_id,
+    )
+    db.commit()
     active_coordinator.cancel_invocations(running_invocations)
     active_coordinator.wake(str(run.session_id))
     return {"run_id": str(run.id), "status": str(run.status), "version": int(run.version or 0)}

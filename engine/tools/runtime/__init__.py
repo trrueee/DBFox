@@ -25,7 +25,7 @@ from engine.tools.runtime.executor import (
 )
 from engine.tools.runtime.registry import ToolKey, ToolRegistry, provider_tool_name
 from engine.tools.runtime.result import ToolOutcome, ToolReconciliation, ToolResult
-from engine.tools.runtime.observation import ToolObservationProjection
+from engine.tools.runtime.observation import ToolMediaReference, ToolObservationProjection
 from engine.tools.runtime.runtime import ToolRuntime
 from engine.tools.runtime.semantics import ToolSemanticSpec
 
@@ -50,6 +50,7 @@ __all__ = [
     "ToolOutcome",
     "ToolReconciliation",
     "ToolObservationProjection",
+    "ToolMediaReference",
     "ToolRunContext",
     "ToolAdmissionContext",
     "ToolAdmissionDecision",

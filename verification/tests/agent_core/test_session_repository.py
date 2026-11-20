@@ -13,10 +13,12 @@ from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.run import RunStatus, SessionLeaseConflict
 from engine.agent.session import DeliveryMode
+from engine.agent.projection import conversation_snapshot
 from engine.models import (
     AgentEventRecord,
     AgentMessage,
     AgentRun,
+    AgentRunItemRecord,
     AgentSession,
     AgentSessionInput,
     AgentTurn,
@@ -60,6 +62,8 @@ def test_admission_is_atomic_ordered_and_idempotent(db_session, test_resource) -
     assert db_session.query(AgentSessionInput).count() == 1
     assert db_session.query(AgentRun).count() == 1
     assert db_session.query(AgentMessage).count() == 2
+    receipt = conversation_snapshot(db_session, "session_1")["items"][0]["payload"]["delivery"]
+    assert receipt == {"input_id": first.input_id, "mode": "queue", "status": "admitted"}
     assert [event.event_type for event in repository.events.list("session_1")] == [
         RuntimeEventType.RUN_STARTED,
         RuntimeEventType.RUN_ITEM_COMPLETED,
@@ -326,10 +330,23 @@ def test_steer_joins_the_active_run_and_is_consumed_at_the_next_turn_boundary(
 
     assert steered.run_id == original.run_id
     assert db_session.query(AgentRun).count() == 1
+    before = next(item for item in conversation_snapshot(db_session, "session_1")["items"] if item["id"] == steered.user_message_id)
+    assert before["payload"]["delivery"]["status"] == "admitted"
     assert repository.consume_steering_inputs(lease=lease, run_id=original.run_id) == ["只看华东区域"]
     db_session.commit()
     stored = db_session.get(AgentSessionInput, steered.input_id)
     assert stored.status == "consumed"
+    after = next(item for item in conversation_snapshot(db_session, "session_1")["items"] if item["id"] == steered.user_message_id)
+    assert after["id"] == before["id"]
+    assert after["sequence"] == before["sequence"]
+    assert after["revision"] == before["revision"] + 1
+    assert after["payload"]["delivery"] == {"input_id": steered.input_id, "mode": "steer", "status": "consumed"}
+    assert db_session.query(AgentRunItemRecord).count() == 2
+    receipt_event = next(event for event in reversed(repository.events.list("session_1")) if event.payload.item is not None)
+    assert receipt_event.payload.item.model_dump(mode="json") == after
+    cursor = conversation_snapshot(db_session, "session_1")["cursor"]
+    assert repository.consume_steering_inputs(lease=lease, run_id=original.run_id) == []
+    assert conversation_snapshot(db_session, "session_1")["cursor"] == cursor
 
 
 def test_orphaned_steer_cannot_revive_a_terminal_run(
@@ -369,6 +386,27 @@ def test_orphaned_steer_cannot_revive_a_terminal_run(
     assert stored_run is not None and stored_run.status == RunStatus.COMPLETED.value
     assert stored_input is not None
     assert stored_input.status == "cancelled"
+    cancelled = next(item for item in conversation_snapshot(db_session, "session_1")["items"] if item["id"] == steered.user_message_id)
+    assert cancelled["payload"]["delivery"]["status"] == "cancelled"
+
+
+def test_input_delivery_and_run_promotion_roll_back_together(db_session, test_resource) -> None:
+    _session(db_session, str(test_resource.id))
+    repository = SessionRepository(db_session)
+    admission = _admit(repository, str(test_resource.id))
+    lease = repository.claim(session_id="session_1", owner="worker")
+    assert lease is not None
+    db_session.commit()
+    before = conversation_snapshot(db_session, "session_1")
+
+    assert repository.promote_next_input(lease=lease) == admission.run_id
+    assert conversation_snapshot(db_session, "session_1")["items"][0]["payload"]["delivery"]["status"] == "promoted"
+    db_session.rollback()
+
+    after = conversation_snapshot(db_session, "session_1")
+    assert after["cursor"] == before["cursor"]
+    assert after["items"] == before["items"]
+    assert after["runs"][0]["status"] == "queued"
 
 
 def test_cancel_and_replace_requests_cancellation_before_admitting_one_new_run(

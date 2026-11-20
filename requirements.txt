@@ -17,3 +17,6 @@ jieba>=0.42.1
 openai>=2.45.0,<3
 openpyxl>=3.1.5,<4
 defusedxml>=0.7.1,<1
+Pillow>=13.0.0,<14.0.0
+playwright>=1.65.2,<2.0.0
+pywinauto>=0.6.9,<0.7.0; sys_platform == "win32"

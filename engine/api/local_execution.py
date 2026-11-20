@@ -9,6 +9,7 @@ from engine.agent.resource_refs import RequestedResourceRef
 from engine.attachments import AttachmentError, require_session
 from engine.db import get_db
 from engine.local_execution.broker import LocalExecutionBroker
+from engine.local_execution.command import LogCursorError
 from engine.local_execution.contracts import ExecutionScope, JobPage, JobView, WORKSPACE_KIND
 from engine.runtime_composition import authorize_conversation_resources
 
@@ -60,6 +61,8 @@ def read_execution_job(
     broker, scope = _context(conversation_id, request, db)
     try:
         return broker.page(scope, job_id, after, limit, tail=tail)
+    except LogCursorError as exc:
+        raise HTTPException(status_code=409, detail={"code": "EXECUTION_LOG_CURSOR_INVALID", "message": str(exc)}) from None
     except (ValueError, KeyError, OSError):
         raise _not_found() from None
 

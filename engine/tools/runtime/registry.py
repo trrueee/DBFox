@@ -3,18 +3,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 
 
-from engine.tools.runtime.base import BaseTool, ControlCommand, ToolCapability
+from engine.tools.runtime.base import BaseTool, ControlCommand, ToolCapability, ToolSpec
 
 if TYPE_CHECKING:
     from engine.tools.runtime.attempt import ToolImplementationIdentity
 
 
 
-RegisteredFunction = BaseTool | ControlCommand
+RegisteredFunction: TypeAlias = BaseTool[Any, Any] | ControlCommand[Any, Any]
 
 _OWNER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
 _PROVIDER_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -60,6 +60,7 @@ class ToolRegistry:
         self._keys_by_object_id: dict[int, ToolKey] = {}
         self._package_digests: dict[ToolKey, str] = {}
         self._host_supervised_processes: set[ToolKey] = set()
+        self._host_computers: set[ToolKey] = set()
         self._frozen = False
         self._available_backends = available_backends or frozenset({"in_process"})
 
@@ -75,6 +76,7 @@ class ToolRegistry:
         package_digest: str | None = None,
         provider_name: str | None = None,
         host_supervised_process: bool = False,
+        host_computer: bool = False,
     ) -> "ToolRegistry":
         if self._frozen:
             raise RuntimeError("Tool Registry is frozen; registration is rejected.")
@@ -96,7 +98,7 @@ class ToolRegistry:
             raise ValueError(
                 f"Provider Tool name {wire_name!r} for {key!r} conflicts with {conflicting_key!r}."
             )
-        self._validate_execution_boundary(tool, host_supervised_process)
+        self._validate_execution_boundary(tool, host_supervised_process, host_computer)
         self._tools[key] = tool
         self._wire_names[key] = wire_name
         self._keys_by_wire_name[wire_name] = key
@@ -105,14 +107,31 @@ class ToolRegistry:
             self._package_digests[key] = package_digest
         if host_supervised_process:
             self._host_supervised_processes.add(key)
+        if host_computer:
+            self._host_computers.add(key)
         return self
 
     def host_supervises_process(self, name: str) -> bool:
         return self._keys_by_wire_name.get(name) in self._host_supervised_processes
 
+    def host_supervises_computer(self, name: str) -> bool:
+        return self._keys_by_wire_name.get(name) in self._host_computers
+
     def freeze(self) -> "ToolRegistry":
         self._frozen = True
         return self
+
+    def copy(self) -> "ToolRegistry":
+        """Create a writable staging registry, preserving every registration authority."""
+        cloned = ToolRegistry(available_backends=self._available_backends)
+        for name in self.tool_names():
+            cloned.register(
+                self.require(name), owner=self.owner_of(name),
+                package_digest=self.package_digest_of(name), provider_name=name,
+                host_supervised_process=self.host_supervises_process(name),
+                host_computer=self._keys_by_wire_name[name] in self._host_computers,
+            )
+        return cloned
 
     def owner_of(self, name: str) -> str | None:
         key = self._keys_by_wire_name.get(name)
@@ -184,7 +203,7 @@ class ToolRegistry:
     def list_tools(self) -> list[RegisteredFunction]:
         return [self.require(name) for name in self.tool_names()]
 
-    def list_specs(self):
+    def list_specs(self) -> list[ToolSpec]:
         return [tool.spec for tool in self.list_tools()]
 
     def __len__(self) -> int:
@@ -193,7 +212,7 @@ class ToolRegistry:
     def __contains__(self, name: str) -> bool:
         return name in self._keys_by_wire_name
 
-    def _validate_execution_boundary(self, tool: RegisteredFunction, host_supervised_process: bool) -> None:
+    def _validate_execution_boundary(self, tool: RegisteredFunction, host_supervised_process: bool, host_computer: bool) -> None:
         execution = tool.execution
         capabilities = set(execution.capabilities)
         if execution.backend not in self._available_backends:
@@ -202,6 +221,8 @@ class ToolRegistry:
                 f"'{execution.backend}'."
             )
         permitted = IN_PROCESS_CAPABILITIES
+        if capabilities.intersection({"computer_read", "computer_control"}) and not host_computer:
+            raise ValueError("Native computer capabilities require explicit Host registration")
         if host_supervised_process:
             if not (
                 execution.backend == "in_process" and "subprocess" in capabilities
@@ -209,6 +230,12 @@ class ToolRegistry:
             ):
                 raise ValueError("Host-supervised processes require an admitted, approval-bound Tool")
             permitted = permitted | {"subprocess"}
+        if host_computer:
+            if execution.backend != "in_process" or not capabilities.intersection({"computer_read", "computer_control"}):
+                raise ValueError("Host computer tools must declare their native computer capability")
+            if "computer_control" in capabilities and not (tool.policy.requires_admission and tool.policy.requires_approval):
+                raise ValueError("Computer control requires admission and approval per invocation")
+            permitted = permitted | {"computer_read", "computer_control"}
         if execution.backend == "in_process" and not capabilities <= permitted:
             forbidden = ", ".join(sorted(capabilities - permitted))
             raise ValueError(

@@ -343,7 +343,7 @@ export type ArtifactRepresentationOperation = {
     /**
      * Purpose
      */
-    purpose?: 'model_read' | 'file' | null;
+    purpose?: 'model_read' | 'model_media' | 'file' | null;
     /**
      * Result Kind
      */
@@ -537,6 +537,46 @@ export type BodyClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPost = {
 };
 
 /**
+ * BrowserState
+ */
+export type BrowserState = {
+    /**
+     * Current Tab Id
+     */
+    current_tab_id: string;
+    /**
+     * Tabs
+     */
+    tabs: Array<BrowserTab>;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
+ * BrowserTab
+ */
+export type BrowserTab = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
  * CompletionDisposition
  */
 export type CompletionDisposition = 'complete' | 'bounded_partial';
@@ -545,6 +585,35 @@ export type CompletionDisposition = 'complete' | 'bounded_partial';
  * CompletionLimitationCode
  */
 export type CompletionLimitationCode = 'TURN_BUDGET_REACHED' | 'TOOL_BUDGET_REACHED' | 'TOKEN_BUDGET_REACHED' | 'COST_BUDGET_REACHED' | 'DEADLINE_REACHED' | 'INSUFFICIENT_EVIDENCE' | 'TOOL_REJECTED' | 'PROVIDER_LIMIT' | 'NO_PROGRESS';
+
+/**
+ * ComputerGrant
+ */
+export type ComputerGrant = {
+    /**
+     * Created At
+     */
+    created_at: number;
+    /**
+     * Expires At
+     */
+    expires_at: number;
+    /**
+     * Id
+     */
+    id: string;
+    permission: Permission;
+    /**
+     * Session Id
+     */
+    session_id: string;
+    status: GrantStatus;
+    target: TargetIdentity;
+    /**
+     * Version
+     */
+    version: string;
+};
 
 /**
  * ConversationCreateRequest
@@ -1517,6 +1586,25 @@ export type FunctionCallPayload = {
 };
 
 /**
+ * GrantStatus
+ */
+export type GrantStatus = 'active' | 'paused' | 'revoked' | 'interrupted' | 'expired';
+
+/**
+ * InputDeliveryReceipt
+ *
+ * Read-only receipt of the existing SessionInput; never a second lifecycle.
+ */
+export type InputDeliveryReceipt = {
+    /**
+     * Input Id
+     */
+    input_id: string;
+    mode: DeliveryMode;
+    status: SessionInputStatus;
+};
+
+/**
  * JobPage
  */
 export type JobPage = {
@@ -1854,6 +1942,7 @@ export type MessagePayload = {
      * Content
      */
     content?: string;
+    delivery?: InputDeliveryReceipt | null;
     /**
      * Evidence
      */
@@ -1889,6 +1978,11 @@ export type PaginationCursorResponse = {
      */
     next_before_sequence?: number | null;
 };
+
+/**
+ * Permission
+ */
+export type Permission = 'observe' | 'control';
 
 /**
  * PlanItem
@@ -2609,6 +2703,79 @@ export type SecurityAuditRecordResponse = {
 };
 
 /**
+ * SessionInputStatus
+ */
+export type SessionInputStatus = 'admitted' | 'promoted' | 'consumed' | 'cancelled';
+
+/**
+ * ShareInput
+ */
+export type ShareInput = {
+    /**
+     * Duration Minutes
+     */
+    duration_minutes?: 5 | 15 | 30;
+    /**
+     * Inventory Id
+     */
+    inventory_id: string;
+    permission?: Permission;
+    /**
+     * Replace Existing
+     */
+    replace_existing?: boolean;
+};
+
+/**
+ * TargetIdentity
+ */
+export type TargetIdentity = {
+    /**
+     * Browser Channel
+     */
+    browser_channel?: 'msedge' | null;
+    /**
+     * Executable
+     */
+    executable: string;
+    /**
+     * Include Owned Dialogs
+     */
+    include_owned_dialogs?: boolean;
+    /**
+     * Kind
+     */
+    kind: 'window' | 'browser';
+    /**
+     * Process Id
+     */
+    process_id?: number | null;
+    /**
+     * Process Started At
+     */
+    process_started_at?: number | null;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Window Handle
+     */
+    window_handle?: string | null;
+};
+
+/**
+ * TargetOption
+ */
+export type TargetOption = {
+    /**
+     * Inventory Id
+     */
+    inventory_id: string;
+    target: TargetIdentity;
+};
+
+/**
  * ToolPresentation
  *
  * Stable user-facing metadata owned by the tool definition.
@@ -3274,6 +3441,112 @@ export type AttachmentCapabilitiesApiV1AttachmentCapabilitiesGetResponses = {
 
 export type AttachmentCapabilitiesApiV1AttachmentCapabilitiesGetResponse = AttachmentCapabilitiesApiV1AttachmentCapabilitiesGetResponses[keyof AttachmentCapabilitiesApiV1AttachmentCapabilitiesGetResponses];
 
+export type StopAllComputerTargetsApiV1ComputerStopPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/computer/stop';
+};
+
+export type StopAllComputerTargetsApiV1ComputerStopPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type StopAllComputerTargetsApiV1ComputerStopPostError = StopAllComputerTargetsApiV1ComputerStopPostErrors[keyof StopAllComputerTargetsApiV1ComputerStopPostErrors];
+
+export type StopAllComputerTargetsApiV1ComputerStopPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: unknown;
+};
+
+export type ListComputerTargetsApiV1ComputerTargetsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/computer/targets';
+};
+
+export type ListComputerTargetsApiV1ComputerTargetsGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ListComputerTargetsApiV1ComputerTargetsGetError = ListComputerTargetsApiV1ComputerTargetsGetErrors[keyof ListComputerTargetsApiV1ComputerTargetsGetErrors];
+
+export type ListComputerTargetsApiV1ComputerTargetsGetResponses = {
+    /**
+     * Response List Computer Targets Api V1 Computer Targets Get
+     *
+     * Successful Response
+     */
+    200: Array<TargetOption>;
+};
+
+export type ListComputerTargetsApiV1ComputerTargetsGetResponse = ListComputerTargetsApiV1ComputerTargetsGetResponses[keyof ListComputerTargetsApiV1ComputerTargetsGetResponses];
+
 export type ListConversationsApiV1ConversationsGetData = {
     body?: never;
     path?: never;
@@ -3631,6 +3904,368 @@ export type SelectConversationArtifactApiV1ConversationsConversationIdArtifactSe
 };
 
 export type SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostResponse = SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostResponses[keyof SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostResponses];
+
+export type ListComputerSharesApiV1ConversationsConversationIdComputerGetData = {
+    body?: never;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{conversation_id}/computer';
+};
+
+export type ListComputerSharesApiV1ConversationsConversationIdComputerGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ListComputerSharesApiV1ConversationsConversationIdComputerGetError = ListComputerSharesApiV1ConversationsConversationIdComputerGetErrors[keyof ListComputerSharesApiV1ConversationsConversationIdComputerGetErrors];
+
+export type ListComputerSharesApiV1ConversationsConversationIdComputerGetResponses = {
+    /**
+     * Response List Computer Shares Api V1 Conversations  Conversation Id  Computer Get
+     *
+     * Successful Response
+     */
+    200: Array<ComputerGrant>;
+};
+
+export type ListComputerSharesApiV1ConversationsConversationIdComputerGetResponse = ListComputerSharesApiV1ConversationsConversationIdComputerGetResponses[keyof ListComputerSharesApiV1ConversationsConversationIdComputerGetResponses];
+
+export type ShareComputerTargetApiV1ConversationsConversationIdComputerPostData = {
+    body: ShareInput;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{conversation_id}/computer';
+};
+
+export type ShareComputerTargetApiV1ConversationsConversationIdComputerPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ShareComputerTargetApiV1ConversationsConversationIdComputerPostError = ShareComputerTargetApiV1ConversationsConversationIdComputerPostErrors[keyof ShareComputerTargetApiV1ConversationsConversationIdComputerPostErrors];
+
+export type ShareComputerTargetApiV1ConversationsConversationIdComputerPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: ComputerGrant;
+};
+
+export type ShareComputerTargetApiV1ConversationsConversationIdComputerPostResponse = ShareComputerTargetApiV1ConversationsConversationIdComputerPostResponses[keyof ShareComputerTargetApiV1ConversationsConversationIdComputerPostResponses];
+
+export type RevokeComputerTargetApiV1ConversationsConversationIdComputerTargetIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Target Id
+         */
+        target_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{conversation_id}/computer/{target_id}';
+};
+
+export type RevokeComputerTargetApiV1ConversationsConversationIdComputerTargetIdDeleteErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type RevokeComputerTargetApiV1ConversationsConversationIdComputerTargetIdDeleteError = RevokeComputerTargetApiV1ConversationsConversationIdComputerTargetIdDeleteErrors[keyof RevokeComputerTargetApiV1ConversationsConversationIdComputerTargetIdDeleteErrors];
+
+export type RevokeComputerTargetApiV1ConversationsConversationIdComputerTargetIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type RevokeComputerTargetApiV1ConversationsConversationIdComputerTargetIdDeleteResponse = RevokeComputerTargetApiV1ConversationsConversationIdComputerTargetIdDeleteResponses[keyof RevokeComputerTargetApiV1ConversationsConversationIdComputerTargetIdDeleteResponses];
+
+export type ReadComputerBrowserApiV1ConversationsConversationIdComputerTargetIdBrowserGetData = {
+    body?: never;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Target Id
+         */
+        target_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{conversation_id}/computer/{target_id}/browser';
+};
+
+export type ReadComputerBrowserApiV1ConversationsConversationIdComputerTargetIdBrowserGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ReadComputerBrowserApiV1ConversationsConversationIdComputerTargetIdBrowserGetError = ReadComputerBrowserApiV1ConversationsConversationIdComputerTargetIdBrowserGetErrors[keyof ReadComputerBrowserApiV1ConversationsConversationIdComputerTargetIdBrowserGetErrors];
+
+export type ReadComputerBrowserApiV1ConversationsConversationIdComputerTargetIdBrowserGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: BrowserState;
+};
+
+export type ReadComputerBrowserApiV1ConversationsConversationIdComputerTargetIdBrowserGetResponse = ReadComputerBrowserApiV1ConversationsConversationIdComputerTargetIdBrowserGetResponses[keyof ReadComputerBrowserApiV1ConversationsConversationIdComputerTargetIdBrowserGetResponses];
+
+export type PreviewComputerTargetApiV1ConversationsConversationIdComputerTargetIdPreviewGetData = {
+    body?: never;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Target Id
+         */
+        target_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{conversation_id}/computer/{target_id}/preview';
+};
+
+export type PreviewComputerTargetApiV1ConversationsConversationIdComputerTargetIdPreviewGetErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type PreviewComputerTargetApiV1ConversationsConversationIdComputerTargetIdPreviewGetError = PreviewComputerTargetApiV1ConversationsConversationIdComputerTargetIdPreviewGetErrors[keyof PreviewComputerTargetApiV1ConversationsConversationIdComputerTargetIdPreviewGetErrors];
+
+export type PreviewComputerTargetApiV1ConversationsConversationIdComputerTargetIdPreviewGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type StopComputerTargetApiV1ConversationsConversationIdComputerTargetIdStopPostData = {
+    body?: never;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Target Id
+         */
+        target_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{conversation_id}/computer/{target_id}/stop';
+};
+
+export type StopComputerTargetApiV1ConversationsConversationIdComputerTargetIdStopPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type StopComputerTargetApiV1ConversationsConversationIdComputerTargetIdStopPostError = StopComputerTargetApiV1ConversationsConversationIdComputerTargetIdStopPostErrors[keyof StopComputerTargetApiV1ConversationsConversationIdComputerTargetIdStopPostErrors];
+
+export type StopComputerTargetApiV1ConversationsConversationIdComputerTargetIdStopPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: unknown;
+};
 
 export type ListConversationEventsApiV1ConversationsConversationIdEventsGetData = {
     body?: never;

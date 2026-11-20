@@ -29,7 +29,7 @@ class ArtifactRepresentationOperation(BaseModel):
     name: str = Field(pattern=REPRESENTATION_OPERATION_PATTERN)
     result_kind: Literal["json", "stream"] = "json"
     media_type: str | None = Field(default=None, min_length=1, max_length=128)
-    purpose: Literal["model_read", "file"] | None = None
+    purpose: Literal["model_read", "model_media", "file"] | None = None
 
     @model_validator(mode="after")
     def validate_media_type(self) -> "ArtifactRepresentationOperation":
@@ -41,6 +41,8 @@ class ArtifactRepresentationOperation(BaseModel):
             raise ValueError("Model-readable representation operations must return JSON")
         if self.purpose == "file" and self.result_kind != "stream":
             raise ValueError("File representation operations must return a stream")
+        if self.purpose == "model_media" and (self.result_kind != "stream" or self.media_type not in {"image/png", "image/jpeg", "image/webp"}):
+            raise ValueError("Model media operations must return a supported image stream")
         return self
 
 

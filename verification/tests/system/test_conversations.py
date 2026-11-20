@@ -93,6 +93,29 @@ def _headers() -> dict[str, str]:
     return {"X-Local-Token": LOCAL_SECURE_TOKEN}
 
 
+def test_cancel_missing_run_returns_not_found(client):
+    response = client.post("/api/v1/runs/missing-run/cancel", headers=_headers())
+    assert response.status_code == 404
+    assert response.json()["code"] == "RUN_NOT_FOUND"
+
+
+def test_cancel_does_not_report_storage_failure_as_missing_run(client, monkeypatch):
+    from fastapi.testclient import TestClient
+    from engine.agent.repositories.run import RunRepository
+
+    def fail_storage(self, *, run_id):
+        raise RuntimeError("cancel storage unavailable")
+
+    monkeypatch.setattr(RunRepository, "request_cancel", fail_storage)
+    failure_client = TestClient(app, raise_server_exceptions=False)
+    try:
+        response = failure_client.post("/api/v1/runs/existing-run/cancel", headers=_headers())
+    finally:
+        failure_client.close()
+    assert response.status_code == 500
+    assert "cancel storage unavailable" not in response.text
+
+
 @pytest.mark.parametrize("status, visible", [
     ("completed", False), ("failed", False), ("cancelled", False),
     ("running", True), ("waiting_approval", True), ("queued", True),

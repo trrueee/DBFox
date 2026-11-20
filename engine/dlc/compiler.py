@@ -269,17 +269,6 @@ class ContributionCompiler:
         known_artifact_representation_keys: set[tuple[str, str]] = set()
         all_operations: list[DlcOperationContribution] = []
 
-        def _clone_tool_registry(base: ToolRegistry) -> ToolRegistry:
-            cloned = ToolRegistry(available_backends=base._available_backends)
-            for name in base.tool_names():
-                cloned.register(
-                    base.require(name),
-                    owner=base.owner_of(name),
-                    package_digest=base.package_digest_of(name),
-                    provider_name=name,
-                )
-            return cloned
-
         # 5. Activate each enabled DLC in canonical order with strict transactional isolation
         for record in enabled_records:
             dlc_id = record.dlc_id
@@ -345,7 +334,7 @@ class ContributionCompiler:
                 # -----------------------------------------------------------------
 
                 # 1. Validate candidate tools against a clone of the accepted registry
-                candidate_tool_registry = _clone_tool_registry(accepted_tool_registry)
+                candidate_tool_registry = accepted_tool_registry.copy()
                 candidate_tools: list[ToolContribution] = []
                 for tool in staging.tools:
                     if tool.execution.backend not in {"in_process", "isolated_process"}:

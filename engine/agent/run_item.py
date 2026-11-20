@@ -12,6 +12,7 @@ from engine.agent.plan import PlanStep
 from engine.agent.references import ConversationInputReference
 from engine.agent.response import CompletionDisposition, CompletionLimitationCode
 from engine.agent.run import RunPhase, RunStatus
+from engine.agent.session import DeliveryMode, SessionInputStatus
 from engine.json_codec import load_array, load_object
 from engine.tools.runtime.base import RiskLevel, ToolPresentation
 
@@ -70,6 +71,22 @@ class EvidenceReference(BaseModel):
         return normalized
 
 
+class InputDeliveryReceipt(BaseModel):
+    """Read-only receipt of the existing SessionInput; never a second lifecycle."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    input_id: str
+    mode: DeliveryMode
+    status: SessionInputStatus
+
+
+def input_delivery_receipt(admitted: Any) -> InputDeliveryReceipt:
+    return InputDeliveryReceipt(
+        input_id=str(admitted.id), mode=admitted.delivery_mode, status=admitted.status,
+    )
+
+
 class MessagePayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -77,6 +94,7 @@ class MessagePayload(BaseModel):
     phase: Literal["commentary", "final_answer"] | None = None
     content: str = ""
     references: list[ConversationInputReference] = Field(default_factory=list, max_length=12)
+    delivery: InputDeliveryReceipt | None = None
     evidence: list[EvidenceReference] = Field(default_factory=list)
     artifact_refs: list[ArtifactReference] = Field(default_factory=list)
     completion_disposition: CompletionDisposition | None = None
@@ -278,7 +296,11 @@ def project_run(run: Any) -> dict[str, Any]:
     }).model_dump(mode="json")
 
 
-def user_message_item(message: Any, *, run_id: str, sequence: int = 0, references: tuple[ConversationInputReference, ...] = ()) -> MessageItem:
+def user_message_item(
+    message: Any, *, run_id: str, sequence: int = 0,
+    references: tuple[ConversationInputReference, ...] = (),
+    delivery: InputDeliveryReceipt | None = None,
+) -> MessageItem:
     return MessageItem(
         type=RunItemType.MESSAGE,
         id=str(message.id),
@@ -289,7 +311,7 @@ def user_message_item(message: Any, *, run_id: str, sequence: int = 0, reference
         status=RunItemStatus.COMPLETED,
         created_at=message.created_at,
         completed_at=message.updated_at,
-        payload=MessagePayload(role="user", content=str(message.content), references=list(references)),
+        payload=MessagePayload(role="user", content=str(message.content), references=list(references), delivery=delivery),
     )
 
 

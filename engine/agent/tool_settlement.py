@@ -94,6 +94,9 @@ class ToolSettlement:
                 needs_reconciliation=needs_reconciliation,
             )
             succeeded = status is ObservationStatus.SUCCEEDED
+            media = [item.model_dump() for item in observation.media] if succeeded else []
+            if any(item["artifact_id"] not in artifact_ids for item in media):
+                raise ValueError("Tool media must reference an Artifact published by this settlement")
             retryable = (
                 result.status != "success"
                 and tool.execution.recovery is ToolRecoveryPolicy.RETRY_SAFE
@@ -128,6 +131,7 @@ class ToolSettlement:
                 error_code=error_code,
                 error_message=result.error,
                 retryable=retryable,
+                media=media,
             )
             db.commit()
             provider_facts = (
@@ -145,6 +149,7 @@ class ToolSettlement:
                     retryable=retryable,
                     error_code=error_code,
                     error_message=result.error,
+                    media=media,
                 ),
             )
 

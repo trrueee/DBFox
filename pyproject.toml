@@ -12,6 +12,17 @@ exclude = [
     "^dlcs/dbfox[.](pixel|shader)/backend/vendor/",
 ]
 
+[[tool.mypy.overrides]]
+module = [
+    "engine.local_execution.broker", "engine.local_execution.command",
+    "engine.local_execution.contracts", "engine.local_execution.records",
+    "engine.local_execution.representation", "engine.local_execution.tools",
+    "engine.tools.runtime.registry",
+]
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
 testpaths = ["verification/tests"]

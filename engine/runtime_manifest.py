@@ -65,6 +65,15 @@ def collect_runtime_manifest() -> dict[str, Any]:
 def collect_release_contracts() -> dict[str, Any]:
     """Execute small provider-neutral contracts inside the final frozen process."""
 
+    if sys.platform == "win32":
+        import win32api
+        import win32process
+        # Exercise the native extension's dynamic timezone import without
+        # enumerating or capturing any user window during a release probe.
+        started = win32process.GetProcessTimes(win32api.GetCurrentProcess())["CreationTime"]
+        if started.timestamp() <= 0:
+            raise RuntimeError("Host process identity returned an invalid creation time")
+
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 

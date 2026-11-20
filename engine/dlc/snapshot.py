@@ -45,6 +45,7 @@ class ToolContribution:
     package_digest: str | None = None
     provider_name: str | None = None
     host_supervised_process: bool = False
+    host_computer: bool = False
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,7 @@ class ArtifactRepresentationContribution:
     provider: ArtifactRepresentationProvider
     owner_id: str
     session_scoped: bool = False
+    requires_current_resources: bool = True
 
 
 @dataclass(frozen=True)

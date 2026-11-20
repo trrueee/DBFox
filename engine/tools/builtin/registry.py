@@ -10,6 +10,7 @@ from engine.tools.runtime import ToolRegistry
 if TYPE_CHECKING:
     from engine.dlc.snapshot import ToolContribution
     from engine.local_execution.broker import LocalExecutionBroker
+    from engine.computer.runtime import ComputerRuntime
     from engine.workbench_presentations import WorkbenchPresentationBroker
 
 CORE_OWNER = "dbfox.core"
@@ -72,7 +73,6 @@ def local_execution_contributions(
     from engine.local_execution.tools import (
         CommandEnvironment, CommandInspect, CommandResult, CommandStart, CommandStdin, CommandStop, bind_command_run,
     )
-
     return (
         ToolContribution(
             bind_command_run(broker, legacy.tool), legacy.owner_id, legacy.package_digest, legacy.provider_name,
@@ -86,3 +86,12 @@ def local_execution_contributions(
             CommandStdin(broker), CommandStop(broker), CommandResult(broker),
         )),
     )
+
+
+def computer_contributions(runtime: ComputerRuntime) -> tuple[ToolContribution, ...]:
+    from engine.computer.contracts import OWNER
+    from engine.computer.tools import ComputerAct, ComputerNavigate, ComputerObserve
+    from engine.dlc.snapshot import ToolContribution
+    return tuple(ToolContribution(tool, OWNER, host_computer=True) for tool in (
+        ComputerObserve(runtime), ComputerAct(runtime), ComputerNavigate(runtime),
+    ))

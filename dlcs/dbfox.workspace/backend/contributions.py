@@ -57,7 +57,7 @@ from .service import (
     WorkspaceService,
 )
 from .store import WORKSPACE_RESOURCE_KIND, WorkspaceBindingStore
-from .representation import FILE_REPRESENTATION, WorkspaceFileRepresentation
+from .representation import FILE_REPRESENTATION, WorkspaceFileRepresentation, file_read_output
 
 FILE_SNAPSHOT = "dbfox.workspace.file_snapshot"
 CODE_PATCH = "dbfox.workspace.code_patch"
@@ -145,10 +145,14 @@ class WorkspaceFileSearchTool(BaseTool[FileSearchInput, FileSearchOutput]):
 class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
     name = "file_read"
     group = "workspace"
-    description = "Read one bounded UTF-8 file from the authorized local workspace."
+    description = (
+        "Read a UTF-8 file in Unicode character ranges. Offset and limit count characters, not lines or bytes. "
+        "Omit limit for small files. If content_truncated is true, continue using next_offset. "
+        "Content preserves the file's line endings; use exact anchors when editing."
+    )
     input_model = FileReadInput
     output_model = FileReadOutput
-    version = "2"
+    version = "3"
     policy = ToolPolicy(risk_level="safe", requires_approval=False)
     execution = ToolExecutionSpec(
         recovery="retry_safe",
@@ -165,23 +169,12 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
     def run(self, input: FileReadInput, context: ExtensionToolRunContext) -> ToolOutcome[FileReadOutput]:
         try:
             snapshot = _workspace(context).read_text_file(input.path)
+            output = file_read_output(snapshot, input)
         except WorkspaceError as exc:
             raise ToolInputError(str(exc)) from exc
         workspace_ref = _scope(context)
         workspace_id = str(workspace_ref.id)
         workspace_version = str(workspace_ref.version or "")
-        content = snapshot.content[input.offset : input.offset + input.limit]
-        output = FileReadOutput(
-            path=snapshot.relative_path,
-            content=content,
-            content_truncated=(
-                snapshot.truncated
-                or input.offset + len(content) < len(snapshot.content)
-            ),
-            size_bytes=snapshot.size_bytes,
-            sha256=snapshot.sha256,
-            offset=input.offset,
-        )
         return ToolOutcome(
             output=output,
             artifacts=(ArtifactDraft(
@@ -213,6 +206,7 @@ class WorkspaceFileReadTool(BaseTool[FileReadInput, FileReadOutput]):
                 "content_truncated": output.get("content_truncated"),
                 "size_bytes": output.get("size_bytes"),
                 "sha256": output.get("sha256"),
+                "next_offset": output["next_offset"],
             },
             provider_payload=output,
         )
@@ -463,7 +457,7 @@ class WorkspaceCommandRunTool(BaseTool[CommandRunInput, CommandRunOutput]):
     )
     input_model = CommandRunInput
     output_model = CommandRunOutput
-    version = "1"
+    version = "2"
     policy = ToolPolicy(risk_level="danger", requires_approval=True)
     execution = ToolExecutionSpec(
         backend="isolated_process",
@@ -533,7 +527,7 @@ class WorkspaceContextContributor:
         }
         fragments: list[ContextFragment] = []
         for observation in input.recent_artifacts:
-            if observation.artifact_type != FILE_SNAPSHOT:
+            if observation.artifact_type not in (FILE_SNAPSHOT, CODE_PATCH):
                 continue
             payload = observation.payload
             artifact_workspace_refs = tuple(
@@ -560,21 +554,23 @@ class WorkspaceContextContributor:
                 snapshot = workspace.read_text_file(str(payload.get("relativePath") or ""))
             except (WorkspaceError, ValueError, StopIteration):
                 continue
-            if snapshot.sha256 != str(payload.get("sha256") or ""):
+            expected_hash = payload.get("newSha256") if observation.artifact_type == CODE_PATCH else payload.get("sha256")
+            if snapshot.sha256 != str(expected_hash or ""):
                 continue
+            kind = "code modification" if observation.artifact_type == CODE_PATCH else "file snapshot"
+            header = f"workspace {kind}: {snapshot.relative_path}\nsha256: {snapshot.sha256}\ncontent:\n"
+            content = snapshot.content[:max(0, MAX_CONTEXT_CHARS - len(header))]
             fragments.append(ContextFragment(
                 source_id="dbfox.workspace",
                 source_version=observation.observation_id,
                 lane="resource",
-                content=(
-                    f"workspace file snapshot: {snapshot.relative_path}\n"
-                    f"sha256: {snapshot.sha256}\ncontent:\n{snapshot.content[:MAX_CONTEXT_CHARS]}"
-                ),
+                content=header + content,
                 provenance={
                     "artifact_id": observation.artifact_id,
+                    "artifact_type": observation.artifact_type,
                     "observation_id": observation.observation_id,
                     "relative_path": snapshot.relative_path,
-                    "content_truncated": len(snapshot.content) > MAX_CONTEXT_CHARS,
+                    "content_truncated": len(content) < len(snapshot.content),
                 },
             ))
             if len(fragments) >= 8:
@@ -630,20 +626,9 @@ def _register_operations(host: BackendExtensionHost, store: WorkspaceBindingStor
     def read_file(input: FileReadInput, context: DlcOperationContext) -> FileReadOutput:
         try:
             snapshot = project_workspace(context).read_text_file(input.path)
+            return file_read_output(snapshot, input)
         except WorkspaceError as exc:
             raise _operation_error(str(exc)) from exc
-        content = snapshot.content[input.offset : input.offset + input.limit]
-        return FileReadOutput(
-            path=snapshot.relative_path,
-            content=content,
-            content_truncated=(
-                snapshot.truncated
-                or input.offset + len(content) < len(snapshot.content)
-            ),
-            size_bytes=snapshot.size_bytes,
-            sha256=snapshot.sha256,
-            offset=input.offset,
-        )
 
     def write_file(input: FileWriteInput, context: DlcOperationContext) -> FileMutationOutput:
         workspace = project_workspace(context)

@@ -10,7 +10,7 @@ import pytest
 
 from engine.runtime_composition import build_product_tool_registry
 from engine.tools.materialization import materialize_tools
-from engine.tools.runtime import ToolKey, ToolRegistry
+from engine.tools.runtime import ToolAdmissionDecision, ToolKey, ToolRegistry
 from engine.tools.runtime.base import (
     BaseTool,
     ToolExecutionSpec,
@@ -129,6 +129,33 @@ def test_invalid_owner_id_is_rejected() -> None:
     registry = ToolRegistry()
     with pytest.raises(ValueError, match="owner ID"):
         registry.register(_EchoTool(), owner="DBFox.Data")
+
+
+def test_registry_copy_preserves_authority_and_isolates_staging() -> None:
+    class ProcessTool(_EchoTool):
+        name = "process"
+        policy = ToolPolicy(requires_admission=True, requires_approval=True)
+        execution = ToolExecutionSpec(capabilities=("subprocess",))
+
+        def admit(self, input, context):
+            return ToolAdmissionDecision(status="blocked", risk_level="danger", reason="Not executed by this registry test")
+
+    class IsolatedTool(_EchoTool):
+        name = "isolated"
+        execution = ToolExecutionSpec(backend="isolated_process", capabilities=("filesystem_write",))
+
+    tool = ProcessTool()
+    base = ToolRegistry(available_backends=frozenset({"in_process", "isolated_process"}))
+    base.register(tool, owner="dbfox.tests", package_digest="digest", provider_name="explicit_name", host_supervised_process=True)
+    base.freeze()
+    staged = base.copy()
+    assert not staged.frozen and base.frozen
+    assert staged.require("explicit_name") is tool
+    assert staged.host_supervises_process("explicit_name")
+    assert staged.implementation_identity_of("explicit_name") == base.implementation_identity_of("explicit_name")
+    staged.register(IsolatedTool(), owner="dbfox.tests")
+    assert len(staged) == 2 and len(base) == 1
+    assert staged.key_of(tool) == base.key_of(tool)
 
 
 def test_semantic_capability_requires_namespaced_ids() -> None:

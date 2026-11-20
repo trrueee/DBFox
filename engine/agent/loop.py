@@ -68,7 +68,7 @@ from engine.llm.endpoint_policy import LlmEndpointPolicyError
 from engine.json_codec import load_object
 from engine.models import AgentRun, AgentSessionInput, AgentTurn
 from engine.tools.materialization import ToolMaterialization, materialize_tools
-from engine.tools.runtime import ToolExecutionTask, ToolExecutor, ToolRegistry
+from engine.tools.runtime import ToolExecutionTask, ToolExecutor, ToolMediaReference, ToolRegistry
 from engine.tools.runtime.attempt import CompositeResourceResolver
 from engine.agent.terminalizer import Terminalizer
 from engine.agent.turn_recorder import RunTurnRecorder
@@ -227,6 +227,7 @@ class RunLoop:
         self.resource_providers = resource_providers
         self.resource_discovery = resource_discovery
         self.artifact_representation_describer = artifact_representation_describer
+        self.artifact_representation_provider_resolver = artifact_representation_provider_resolver
         self.capability_guidance = capability_guidance or ()
         self.completion = completion
         self.tool_dispatcher = ToolDispatcher(
@@ -479,6 +480,10 @@ class RunLoop:
         try:
             adapter = self.model_factory(prepared.provider_settings)
             state.control.checkpoint()
+            from engine.agent.model_media import materialize_model_media
+            messages = materialize_model_media(prepared.messages,
+                read=lambda ref: self._read_model_media(lease.session_id, run_id, ref),
+                check_cancelled=state.control.checkpoint)
             result = TurnStreamAssembler().consume(
                 self.turn_recorder.publish(
                     lease=lease,
@@ -486,7 +491,7 @@ class RunLoop:
                     turn_id=prepared.turn_id,
                     control=state.control,
                     items=adapter.stream(
-                        messages=prepared.messages,
+                        messages=messages,
                         tools=prepared.provider_tools,
                         stream_timeouts=self._model_stream_timeouts(state),
                         cancellation_probe=state.control.is_cancel_requested,
@@ -547,6 +552,41 @@ class RunLoop:
         if budget_error is not None:
             raise budget_error
         return result
+
+    def _read_model_media(self, session_id: str, run_id: str, ref: "ToolMediaReference") -> tuple[bytes, str]:
+        from engine.agent.model_media import MAX_MODEL_IMAGE_BYTES
+        from engine.agent.repositories.artifact import ArtifactRepository
+        from engine.representation import (
+            ArtifactRepresentationContext, ArtifactRepresentationError, ArtifactRepresentationRequest,
+            ArtifactRepresentationStream, execute_artifact_representation,
+        )
+        with self.session_factory() as db:
+            repository = ArtifactRepository(db, resource_discovery=self.resource_discovery)
+            def load(artifact_id: str) -> Artifact | None:
+                return repository.available_artifact(session_id=session_id, current_run_id=run_id, artifact_id=artifact_id)
+            artifact = load(ref.artifact_id)
+            resolver = self.artifact_representation_provider_resolver
+            provider = resolver(artifact.type, ref.representation_type) if artifact is not None and resolver else None
+            if artifact is None or provider is None:
+                raise ArtifactRepresentationError("SOURCE_UNAVAILABLE", "Image source is unavailable in this Run.", status_code=409)
+            operation = provider.describe(artifact).operation(ref.operation)
+            if operation is None or operation.purpose != "model_media":
+                raise ArtifactRepresentationError("UNSUPPORTED_REPRESENTATION", "This operation is not a model image.", status_code=409)
+            _, stream = execute_artifact_representation(artifact=artifact, representation_type=ref.representation_type,
+                request=ArtifactRepresentationRequest(operation=ref.operation), provider=provider,
+                context=ArtifactRepresentationContext(artifact_loader=load), expected_kind="stream")
+            assert isinstance(stream, ArtifactRepresentationStream)
+            image = bytearray()
+            try:
+                for chunk in stream.chunks:
+                    if not isinstance(chunk, bytes) or len(image) + len(chunk) > MAX_MODEL_IMAGE_BYTES:
+                        raise ArtifactRepresentationError("INVALID_REQUEST", "Image exceeds model media budget.")
+                    image.extend(chunk)
+            finally:
+                close = getattr(stream.chunks, "close", None)
+                if callable(close):
+                    close()
+            return bytes(image), stream.media_type
 
     @staticmethod
     def _model_stream_timeouts(state: _ExecutionState) -> ModelStreamTimeouts:

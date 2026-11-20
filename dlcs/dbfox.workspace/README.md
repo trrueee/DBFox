@@ -2,22 +2,24 @@
 
 Official System DLC for Project-scoped local workspaces. The DLC owns the
 workspace binding, path containment, bounded file read/write/edit/search,
-command execution, Agent tools, context contribution, artifact contracts,
-Connector, and file Dock. Core owns the native folder picker and the generic
-Tool Runtime only.
+Agent tools, context contribution, file artifact contracts, Connector, and file Dock.
+The Sidecar Host owns Windows process supervision, Job persistence and execution
+evidence; Core owns the native folder picker and the generic Tool Runtime.
 
-Read and grep tools run in-process with `filesystem_read`. File mutation and
-`command_run` use the existing isolated worker, require the matching signed
-manifest permission, and enter the canonical Approval lifecycle. The worker is
-a timeout/cancellation and process-tree boundary for trusted package code; it
-is not described as an untrusted-code OS sandbox. Commands receive an argv
-array, never a model-authored shell string, run below the bound workspace root,
-inherit no DBFox secret-bearing environment variables, and return only a
-bounded output tail. 目录扫描、grep 候选、单文件读取和命令总输出都有独立硬上限；
-达到命令总输出上限时会终止进程树，而不是只截断展示后让子进程继续无限写入。
+Read and grep tools run in-process with `filesystem_read`. File mutations use
+the existing isolated worker and canonical Approval lifecycle, with matching
+signed manifest permissions. Trusted package workers do not provide an OS sandbox.
+On Windows, product composition replaces `command_run` with the Sidecar Broker
+implementation and adds start/inspect/stdin/stop/result tools. The standalone
+Workspace service rejects unmanaged Windows launches. The Broker separates direct
+EXE argv from explicitly approved cmd scripts, keeps draining output beyond log
+retention, and returns a durable Job identity. See the authoritative
+[execution contract](../../docs/architecture/local-development-execution.md), including
+the temporary POSIX one-shot path and its exit conditions.
 
 文件快照和文件变更成果通过 `dbfox.workspace.file.v1` Representation 读取内容，
-复用既有 Markdown/代码查看组件。每次最多读取 12,000 字符；分页检查原始
+复用既有 Markdown/代码查看组件。默认每次读取 12,000 个 Unicode 字符，offset/limit
+均按字符计并返回 next_offset；Tool、operation 与 Representation 共用分页逻辑，检查原始
 内容 hash。绑定被撤销、根目录版本变化或文件内容不再一致时明确拒绝读取，
 不把最新文件冒充历史快照，也不在 Artifact 中复制整份文件内容。
 
@@ -32,6 +34,7 @@ bounded output tail. 目录扫描、grep 候选、单文件读取和命令总输
 Windows 移动使用拒绝覆盖的 rename。工具返回明确的变更提示，public operation 返回
 `WORKSPACE_CONFLICT` / HTTP 409，均不自动重新读取后写入。
 写入结果描述本次提交的字节，不重新读取并把其他人的后续修改当作本次成果。
+精确编辑保持换行字节；CRLF/LF 不匹配时说明如何修正，不自动转换整个文件。
 
 现有 SQLite writer reservation 覆盖 DLC 进程之间的写入，但外部编辑器不参加该锁；
 hash 检查和最终替换之间并非文件系统原子 CAS。当前真实验证为 Windows，
@@ -55,14 +58,12 @@ hash 检查和最终替换之间并非文件系统原子 CAS。当前真实验�
 
 ## 选型依据
 
-实现复用了项目已有的 Tool Approval、isolated worker、package digest 和
-ResourceRef，没有增加第二套终端执行器。进程创建使用 Python 标准库
-[`subprocess`](https://docs.python.org/3/library/subprocess.html) 的 argv 与
-`shell=False` 路径；超时后显式终止进程树。权限形态参考
+实现复用了项目已有的 Tool Approval、isolated worker、package digest、ResourceRef
+和 Host Broker，没有增加第二套终端执行器。Windows 进程创建与停止交给现有 Job Object
+监督实现。仅尚未验证的 POSIX 单次命令保留标准库 subprocess 路径。权限形态参考
 [Claude Code 的分层工具权限](https://docs.anthropic.com/en/docs/claude-code/iam)
 和 [OpenAI Responses 的 shell/apply-patch/approval 合同](https://platform.openai.com/docs/api-reference/responses-streaming/response/refusal)：
 只读默认不审批，文件变更和命令按 Invocation 审批。没有引入 PTY、通用
 shell parser 或第三方进程库。子进程环境使用运行工具所需的路径、区域与临时目录
-白名单，不把任意宿主环境变量透传给模型选择的进程；代价是 `command_run` 不支持
-管道、重定向、shell 内建命令，依赖自定义环境变量的命令也必须改用显式配置文件或
-目标可执行文件参数。
+白名单，不把任意宿主环境变量透传给模型选择的进程。`command_run` 只接受 argv；
+Windows 的 Shell、管道和非敏感环境覆盖通过单独获批的 `command_start` 明确表达。

@@ -373,6 +373,11 @@ class WorkspaceService:
             raise WorkspaceError("old_string must not be empty")
         occurrences = snapshot.content.count(old_string)
         if occurrences == 0:
+            if "\r\n" in snapshot.content and old_string in snapshot.content.replace("\r\n", "\n"):
+                raise WorkspaceError(
+                    "old_string was not found because the file uses CRLF line endings. "
+                    "Preserve \\r\\n in the anchor or choose a smaller unique anchor without line breaks. No changes were made."
+                )
             raise WorkspaceError("old_string was not found")
         if occurrences > 1 and not replace_all:
             raise WorkspaceError(
@@ -494,6 +499,8 @@ class WorkspaceService:
         cwd: str = "",
         timeout_seconds: int = 60,
     ) -> CommandRunResult:
+        if os.name == "nt":
+            raise WorkspaceError("Windows command execution requires the Host Broker")
         if not argv or any(not value or "\0" in value for value in argv):
             raise WorkspaceError("Command argv must contain non-empty strings")
         if not 1 <= timeout_seconds <= MAX_COMMAND_TIMEOUT_SECONDS:
@@ -514,10 +521,7 @@ class WorkspaceService:
                 stderr=subprocess.STDOUT,
                 shell=False,
                 env=_command_environment(),
-                creationflags=int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
-                if os.name == "nt"
-                else 0,
-                start_new_session=os.name != "nt",
+                start_new_session=True,
             )
         except OSError as exc:
             raise WorkspaceError("Command could not be started") from exc
@@ -648,23 +652,15 @@ def _command_environment() -> dict[str, str]:
 def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is not None:
         return
-    if os.name == "nt":
-        subprocess.run(
-            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-    else:
-        try:
-            killpg = getattr(os, "killpg", None)
-            getpgid = getattr(os, "getpgid", None)
-            sigkill = getattr(signal, "SIGKILL", None)
-            if not callable(killpg) or not callable(getpgid) or sigkill is None:
-                raise OSError("process group termination is unavailable")
-            killpg(getpgid(process.pid), sigkill)
-        except (ProcessLookupError, PermissionError, OSError):
-            process.kill()
+    try:
+        killpg = getattr(os, "killpg", None)
+        getpgid = getattr(os, "getpgid", None)
+        sigkill = getattr(signal, "SIGKILL", None)
+        if not callable(killpg) or not callable(getpgid) or sigkill is None:
+            raise OSError("process group termination is unavailable")
+        killpg(getpgid(process.pid), sigkill)
+    except (ProcessLookupError, PermissionError, OSError):
+        process.kill()
     try:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:

@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from engine.json_codec import byte_size, to_json_value
+from engine.representation import REPRESENTATION_OPERATION_PATTERN, REPRESENTATION_TYPE_PATTERN
 
 
 RESULT_VALUE_KEYS = frozenset(
@@ -29,12 +30,22 @@ MODEL_RESULT_WINDOW_BYTES = 24_000
 MODEL_RESULT_CELL_CHARS = 2_000
 
 
+class ToolMediaReference(BaseModel):
+    """Immutable image source, resolved only at the model request boundary."""
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    artifact_id: str = Field(min_length=1, max_length=128)
+    representation_type: str = Field(pattern=REPRESENTATION_TYPE_PATTERN)
+    operation: str = Field(pattern=REPRESENTATION_OPERATION_PATTERN)
+
+
 class ToolObservationProjection(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     summary: str
     facts: dict[str, Any] = Field(default_factory=dict)
     provider_payload: dict[str, Any] = Field(default_factory=dict)
+    media: tuple[ToolMediaReference, ...] = Field(default=(), max_length=1)
 
     @model_validator(mode="after")
     def validate_provider_payload_budget(self) -> "ToolObservationProjection":

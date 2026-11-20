@@ -11,11 +11,25 @@ from dbfox_dlc_api import (
 )
 
 from .contracts import FileReadInput, FileReadOutput, WorkspaceCodePatchPayload, WorkspaceFileSnapshotPayload
-from .service import WorkspaceError
+from .service import WorkspaceError, WorkspaceFile
 from .store import WORKSPACE_RESOURCE_KIND, WorkspaceBindingStore
 
 FILE_REPRESENTATION = "dbfox.workspace.file.v1"
 FILE_MEDIA_TYPE = "text/plain; charset=utf-8"
+
+
+def file_read_output(snapshot: WorkspaceFile, input: FileReadInput) -> FileReadOutput:
+    """Canonical character page for Tools, user operations and representations."""
+    if input.offset > len(snapshot.content):
+        raise WorkspaceError("Read offset exceeds the file's character length. Read from offset=0 and reuse next_offset for subsequent pages.")
+    content = snapshot.content[input.offset : input.offset + input.limit]
+    next_offset = input.offset + len(content)
+    return FileReadOutput(
+        path=snapshot.relative_path, content=content,
+        content_truncated=snapshot.truncated or next_offset < len(snapshot.content),
+        size_bytes=snapshot.size_bytes, sha256=snapshot.sha256,
+        offset=input.offset, next_offset=next_offset,
+    )
 
 
 class WorkspaceFileRepresentation:
@@ -72,12 +86,10 @@ class WorkspaceFileRepresentation:
                 file_name=PurePosixPath(source.relative_path).name,
                 metadata={"consistency": "live_reexecution", "source-fingerprint": digest},
             )
-        content = source.content[read.offset:read.offset + read.limit]
-        output = FileReadOutput(
-            path=source.relative_path, content=content,
-            content_truncated=source.truncated or read.offset + len(content) < len(source.content),
-            size_bytes=source.size_bytes, sha256=source.sha256, offset=read.offset,
-        )
+        try:
+            output = file_read_output(source, read)
+        except WorkspaceError as exc:
+            raise ArtifactRepresentationError("INVALID_REQUEST", str(exc), status_code=409) from None
         return ArtifactRepresentationResult(
             representation_type=FILE_REPRESENTATION, representation_version=1, operation="read",
             payload=output.model_dump(mode="json"), consistency="live_reexecution",

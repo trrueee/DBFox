@@ -4,7 +4,7 @@
 >
 > 状态：已接受
 >
-> 最后核验：2026-11-10
+> 最后核验：2026-11-16
 >
 > 适用范围：Windows 11 x64、Workspace System DLC、Sidecar、Tool Runtime 与 Dock
 
@@ -41,13 +41,43 @@ Job Object 默认禁止 breakaway，并启用最后句柄关闭时清理。终�
 | command_stdin | 向已开启的管道写入最多 4096 字节，或发送 EOF。每次批准，有部分写入可能时明确反馈 |
 | command_stop | 请求结束 Job 内的进程。最终清理由后续状态确认 |
 | command_result | 终态后发布可读的执行证据，支持关联现有文件快照、修改工件或输出报告 |
-| command_run | 兼容 Workspace 原有输入与输出模型。在 Windows 托管路径等待终态，其他平台沿用原执行路径 |
+| command_run | 沿用 Workspace 的 argv/cwd 合同。Windows 由 Broker 等待进程树与输出终态，返回 execution_job_id；随后独立调用 command_result 交付成果 |
 
 命令的 `cwd` 沿用 Workspace 的项目相对路径合同，省略或使用 `.` 时从绑定根目录运行。程序身份通过 `argv` 单独解析。模型收到程序位置和项目标志，审批与执行记录保留实际工作目录供用户核对。无效目录由 Workspace 返回可修正的原因，申请审批前即停止。
 
+`shell_script` 是传给 `cmd /c` 的单条命令行；换行在输入边界拒绝，并说明可以用 `&&` 串联检查，
+或显式调用已有 `.cmd/.bat` 文件。不会自行改写换行、解析批处理语法或创建隐藏脚本。
+该选择复用 Windows 的命令行语义，避免把多行批处理当成一条已验证的命令。[Windows cmd](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/cmd)
+
 前台任务默认随 Run 结束。显式批准的后台任务可跨越 Run 的正常完成，最长两小时。Run 失败或取消、会话删除、绑定撤销和 Sidecar 退出均触发清理。Sidecar 重启为尚未结算的 Job 标记 interrupted，保留已有证据并禁止重放。
 
+stdin 在实际写入前重新取得 Workspace 绑定租约，并检查 Run 与当前 Invocation 的取消状态。
+撤销后即使重绑相同目录，旧代次也不能继续写入。租约只围绕实际副作用持有。
+
 每个 Job 最多保留最近 8 MiB 原始字节，stdout 和 stderr 分开标记。游标表示采集顺序。旧游标到期后返回保留起点与截断标记，继续排空管道。后台维护会清理超过七天或总量 256 MiB 的终态日志。单次模型查看最多两个 4 KiB 原始分块，Dock 单页最多十六个。预览按 UTF-8 解码，非法字节使用替换字符。终态 Artifact 引用同一份保留日志，保留窗口变化后会反映在表示的指纹与游标。
+
+跨块 UTF-8 字符保持完整。采集器在每个管道 EOF 持久化一条零字节记录；它不占用字节保留预算，
+分页以它排空未完成字符。活动流的半个字符不会阻挡另一条流；后续字节继续同一解码状态，
+EOF 仍不足一个字符时使用替换字符。无 EOF 记录的历史终态 Job 沿已有终态事实排空。
+这段历史读取规则由执行 Runtime 维护者负责；可查询保留日志末端缺少结束记录的 Job 数量，
+确认旧日志均已过期清理后删除对应终态分支。正常保留窗口为七天，迁移回归独立覆盖历史格式。
+大于已采集位置的未来游标返回 409 和明确的重新读取指引。日志过期后，Artifact 身份与退出事实仍可读取，输出不保证永久保留。
+Dock 在空列表和终态列表中也继续发现新 Job；停止请求被受理后仍以后端终态为准。
+
+Workspace 的现有 ContextContributor 同时恢复文件快照和代码修改工件。恢复前校验当前授权代次，
+并将当前文件 hash 与快照 sha256 或修改 newSha256 比较；内容已变化的记录不充当当前内容。
+有界片段保留正式 Artifact ID 和类型，明确区分读取快照与实际修改，供后续执行证据引用。
+这只是现有 Artifact 的上下文投影，不新建文件状态、成果目录或 Kernel 规则。
+
+## 旧路径退出
+
+Windows 的 WorkspaceService 不再创建 subprocess，也不调用 taskkill；绕过产品装配会得到
+“requires the Host Broker”错误。所有正式 Windows 启动和停止只由现有 Broker 负责。
+Workspace/DLC 与执行运行时维护者共同负责 POSIX 的旧单次命令路径：它暂时保留在
+WorkspaceService，只供尚未验证的非 Windows 开发使用，不提供持久 Job、stdin 或新执行能力。
+可从正式 Invocation 的进程后端与 command_run 的 execution_job_id 是否为空观察使用情况。
+该路径不接受新增功能；当 POSIX Broker 完成真实进程树与封装验证时删除旧 subprocess 路径及对应测试，
+统一为同一 Host 所有权。当前没有 macOS/Linux 发布通过证据。
 
 本机执行使用当前系统用户权限，能访问该用户可访问的文件、网络和程序。工作目录用于选定项目，Job Object 用于管理进程生命周期。审批显示解析后的程序、参数或脚本、目录、时限与后台选项。直接模式只解析本机 EXE，批处理使用显式 Shell。默认子进程环境从有限变量清单构造，排除 DBFox 运行凭据。项目和日志中的文字没有批准权限。请避免在命令、环境覆盖或 stdin 中写入凭据。
 

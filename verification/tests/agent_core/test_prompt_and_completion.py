@@ -70,7 +70,7 @@ def test_prompt_keeps_user_context_out_of_system_role():
         definition=DEFAULT_AGENT_DEFINITION,
         context=_context(),
     ).hash
-    assert bundle.version == "4.1"
+    assert bundle.version == "4.3"
     assert "requested outcome, explicit constraints" in bundle.system_prompt
     assert "denominator" not in bundle.system_prompt
     assert "authorized Resource" in bundle.system_prompt

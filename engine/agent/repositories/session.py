@@ -19,6 +19,7 @@ from engine.agent.events import (
 from engine.agent.repositories.events import EventRepository
 from engine.agent.run import RunPhase, RunStatus, SessionLeaseConflict, TERMINAL_RUN_STATUSES
 from engine.agent.run_item import (
+    input_delivery_receipt,
     dump_run_item,
     project_run,
     user_message_item,
@@ -322,7 +323,7 @@ class SessionRepository:
             aggregate,
             RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=run_id,
-            payload={"item": dump_run_item(user_message_item(user_message, run_id=run_id, references=references))},
+            payload={"item": dump_run_item(user_message_item(user_message, run_id=run_id, references=references, delivery=input_delivery_receipt(admitted)))},
             now=now,
         )
         self.session.flush()
@@ -359,6 +360,7 @@ class SessionRepository:
         for row in rows:
             row.status = SessionInputStatus.CONSUMED.value
             row.consumed_at = now
+            self.events.publish_input_delivery(row, now=now)
         run.version = int(run.version or 0) + 1
         run.updated_at = now
         self.events.append_locked(
@@ -470,10 +472,12 @@ class SessionRepository:
                 # checks for pending steer inputs before committing.
                 admitted.status = SessionInputStatus.CANCELLED.value
                 admitted.consumed_at = now
+                self.events.publish_input_delivery(admitted, now=now)
                 continue
             if run.status != RunStatus.QUEUED.value:
                 continue
             admitted.status = SessionInputStatus.PROMOTED.value
+            self.events.publish_input_delivery(admitted, now=now)
             run.status = RunStatus.RUNNING.value
             run.version = int(run.version or 0) + 1
             run.lease_token = lease.token
@@ -588,30 +592,29 @@ class SessionRepository:
         )
         self.session.add(message)
         self.session.flush()
-        self.session.add(
-            AgentSessionInput(
-                id=f"input_{uuid4().hex}",
-                session_id=lease.session_id,
-                run_id=run_id,
-                message_id=message.id,
-                sequence=int(aggregate.input_sequence),
-                idempotency_key=idempotency_key,
-                content=content,
-                delivery_mode=DeliveryMode.RESPOND.value,
-                selected_artifact_ids_json="[]",
-                workspace_context_json="{}",
-                reply_to_request_id=reply_to_request_id,
-                status=SessionInputStatus.CONSUMED.value,
-                admitted_at=current_time,
-                consumed_at=current_time,
-            )
+        response_input = AgentSessionInput(
+            id=f"input_{uuid4().hex}",
+            session_id=lease.session_id,
+            run_id=run_id,
+            message_id=message.id,
+            sequence=int(aggregate.input_sequence),
+            idempotency_key=idempotency_key,
+            content=content,
+            delivery_mode=DeliveryMode.RESPOND.value,
+            selected_artifact_ids_json="[]",
+            workspace_context_json="{}",
+            reply_to_request_id=reply_to_request_id,
+            status=SessionInputStatus.CONSUMED.value,
+            admitted_at=current_time,
+            consumed_at=current_time,
         )
+        self.session.add(response_input)
         self.session.flush()
         self.events.append_locked(
             aggregate,
             RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=run_id,
-            payload={"item": dump_run_item(user_message_item(message, run_id=run_id))},
+            payload={"item": dump_run_item(user_message_item(message, run_id=run_id, delivery=input_delivery_receipt(response_input)))},
             now=current_time,
         )
         return message
@@ -686,7 +689,7 @@ class SessionRepository:
             aggregate,
             RuntimeEventType.RUN_ITEM_COMPLETED,
             run_id=str(run.id),
-            payload={"item": dump_run_item(user_message_item(message, run_id=str(run.id), references=references))},
+            payload={"item": dump_run_item(user_message_item(message, run_id=str(run.id), references=references, delivery=input_delivery_receipt(admitted)))},
             now=now,
         )
         self.session.flush()

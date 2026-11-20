@@ -49,6 +49,8 @@ KEY_BUILD_PACKAGES = (
     "alembic",
     "fastapi",
     "openai",
+    "pillow",
+    "playwright",
     "pydantic",
     "pyinstaller",
     "sqlalchemy",
@@ -335,7 +337,7 @@ def _git_source_facts() -> dict[str, object]:
 
 
 def _build_environment_facts(python_exe: str) -> dict[str, object]:
-    package_literal = json.dumps(KEY_BUILD_PACKAGES)
+    package_literal = json.dumps((*KEY_BUILD_PACKAGES, *(("pywinauto", "comtypes") if sys.platform == "win32" else ())))
     command = [
         python_exe,
         "-c",
@@ -454,6 +456,10 @@ def build_pyinstaller(python_exe: str, system_dlc_manifest: Path) -> Path:
 
     for mod in HIDDEN_IMPORTS:
         cmd += ["--hidden-import", mod]
+    if sys.platform == "win32":
+        # pywintypes imports this from native GetProcessTimes code; static
+        # analysis cannot see it. Target identity requires timezone-aware times.
+        cmd += ["--hidden-import", "win32timezone"]
     cmd.append(str(ENGINE_DIR / "main.py"))
 
     print("  -> Running PyInstaller (venv: {})...".format(python_exe))

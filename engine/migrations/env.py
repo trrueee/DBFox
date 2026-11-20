@@ -17,6 +17,7 @@ from engine.migrations.sqlite_mutex import sqlite_file_target, sqlite_migration_
 # Import models to ensure they are registered on Base.metadata for autogenerate
 from engine import models as _models  # register ORM tables on Base.metadata
 from engine.local_execution import records as _local_execution_records
+from engine.computer import records as _computer_records
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -33,6 +34,7 @@ if config.config_file_name is not None:
 # Set target metadata for autogenerate support
 target_metadata = _models.Base.metadata
 assert _local_execution_records.LocalExecutionJob.metadata is target_metadata
+assert _computer_records.ComputerGrantRecord.metadata is target_metadata
 
 _FTS_VIRTUAL_TABLES = {"schema_search_fts", "query_history_fts", "agent_message_fts"}
 _FTS_SHADOW_SUFFIXES = {"data", "idx", "content", "docsize", "config"}

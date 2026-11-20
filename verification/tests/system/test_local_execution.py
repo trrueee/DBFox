@@ -7,10 +7,14 @@ import shutil
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from threading import Event
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import sessionmaker
 
 from engine.agent.artifact import artifact_payload_contracts
@@ -21,7 +25,7 @@ from engine.dlc.api import DlcOperationContext
 from engine.local_execution.broker import LocalExecutionBroker, supported
 from engine.local_execution.command import ExecutionError
 from engine.local_execution.contracts import ACTIVE_STATES, ExecutionScope, StartInput
-from engine.local_execution.records import LocalExecutionJob
+from engine.local_execution.records import LocalExecutionJob, LocalExecutionLog
 from engine.local_execution.representation import LOG_REPRESENTATION, RESULT_ARTIFACT
 from engine.models import AgentApproval, AgentRun, AgentSession, Project
 from engine.representation import ArtifactRepresentationContext, ArtifactRepresentationError, ArtifactRepresentationRequest
@@ -211,6 +215,120 @@ def test_timeout_and_launch_failure_have_distinct_states(workbench):
     assert failed.state == "start_failed" and failed.root_exit_code is None
 
 
+def test_stdin_rechecks_binding_at_the_write_boundary(workbench, monkeypatch):
+    sessions, _, broker, project, scope, binding = workbench
+    with sessions.begin() as db:
+        db.add(AgentRun(id="r", session_id="s", question="Read input", status="running"))
+    job = _start(broker, scope,
+                 "import pathlib,sys; value=sys.stdin.readline(); pathlib.Path('received.txt').write_text(value)",
+                 interactive=True)
+    resource = broker.resolve_workspace(scope.workspace)
+    ready, release = Event(), Event()
+
+    class DelayedLease:
+        def command_directory(self, path):
+            return resource.command_directory(path)
+
+        @contextmanager
+        def execution_directory(self, path):
+            ready.set()
+            assert release.wait(3)
+            with resource.execution_directory(path) as directory:
+                yield directory
+
+    monkeypatch.setattr(broker, "resolve_workspace", lambda _: DelayedLease())
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        write = executor.submit(broker.write, scope, job.id, "should-not-arrive\n", close=True)
+        try:
+            assert ready.wait(1), "stdin never acquired a Workspace lease"
+            binding("delete")
+            binding("create", root_path=str(project))
+        finally:
+            release.set()
+        with pytest.raises(ExecutionError, match="no stdin was written"):
+            write.result(timeout=3)
+    assert not (project / "received.txt").exists()
+
+
+@pytest.mark.parametrize("change,reason", [
+    ("failed", "run_failed"), ("cancelling", "run_cancelled"),
+    ("cancel_requested", "run_cancelled"), ("deleted", "conversation_removed"),
+])
+def test_background_jobs_do_not_outlive_failed_or_removed_owners(workbench, change, reason):
+    from datetime import UTC, datetime
+
+    sessions, _, broker, _, scope, _ = workbench
+    with sessions.begin() as db:
+        db.add(AgentRun(id="r", session_id="s", question="Keep background work", status="running"))
+    job = _start(broker, scope, "import time; time.sleep(60)", lifetime="background")
+    with sessions.begin() as db:
+        if change == "deleted":
+            db.get(AgentSession, "s").deleted_at = datetime.now(UTC)
+        elif change == "cancel_requested":
+            db.get(AgentRun, "r").cancel_requested = True
+        else:
+            db.get(AgentRun, "r").status = change
+    ended = _terminal(broker, scope, job.id)
+    assert (ended.state, ended.reason, ended.active_processes, ended.output_finalized) == ("cancelled", reason, 0, True)
+
+
+def test_incomplete_live_utf8_does_not_block_the_other_stream_and_flushes_at_eof(workbench):
+    sessions, _, broker, _, scope, _ = workbench
+    with sessions.begin() as db:
+        db.add(AgentRun(id="r", session_id="s", question="Stream a character", status="running"))
+    job = _start(broker, scope, (
+        "import os,sys; os.write(1,b'pre:\\xf0'); os.write(2,b'live-error'); "
+        "sys.stdin.readline(); os.write(1,b'\\x9f\\x98\\x80'); os.write(2,b'\\xe2')"
+    ), interactive=True)
+    _until(lambda: broker.get(scope, job.id).last_cursor >= 2)
+    pending = broker.page(scope, job.id, 0, 16)
+    output = {stream: "".join(chunk.text for chunk in pending.chunks if chunk.stream == stream)
+              for stream in ("stdout", "stderr")}
+    assert output == {"stdout": "pre:", "stderr": "live-error"}
+    assert not pending.has_more and pending.next_cursor > 0
+    broker.write(scope, job.id, "continue\n", close=True)
+    _terminal(broker, scope, job.id)
+    cursor = pending.next_cursor
+    while True:
+        page = broker.page(scope, job.id, cursor, 1)
+        for chunk in page.chunks:
+            output[chunk.stream] += chunk.text
+        cursor = page.next_cursor
+        if not page.has_more:
+            break
+    assert output == {"stdout": "pre:😀", "stderr": "live-error�"}
+
+
+@pytest.mark.parametrize("legacy_logs", [False, True])
+def test_log_pages_preserve_split_utf8_and_terminal_incomplete_bytes(workbench, legacy_logs):
+    sessions, _, broker, _, scope, _ = workbench
+    with sessions.begin() as db:
+        db.add(AgentRun(id="r", session_id="s", question="Emit split bytes", status="running"))
+    job = _start(broker, scope, (
+        "import os,time; "
+        "os.write(1,b'pre:\\xf0'); time.sleep(.15); "
+        "os.write(1,b'\\x9f'); time.sleep(.15); "
+        "os.write(1,b'\\x98'); time.sleep(.15); "
+        "os.write(1,b'\\x80\\xe2'); os.write(2,b'err:\\xf0\\x9f')"
+    ))
+    final = _terminal(broker, scope, job.id)
+    assert final.output_finalized
+    if legacy_logs:
+        # Reproduce the retained-log format from before capture-end records.
+        with sessions.begin() as db:
+            db.execute(delete(LocalExecutionLog).where(LocalExecutionLog.job_id == job.id, func.length(LocalExecutionLog.data) == 0))
+            db.get(LocalExecutionJob, job.id).last_cursor = db.scalar(select(func.max(LocalExecutionLog.cursor)).where(LocalExecutionLog.job_id == job.id))
+    cursor, output = 0, {"stdout": "", "stderr": ""}
+    while True:
+        page = broker.page(scope, job.id, cursor, 1)
+        for chunk in page.chunks:
+            output[chunk.stream] += chunk.text
+        cursor = page.next_cursor
+        if not page.has_more:
+            break
+    assert output == {"stdout": "pre:😀�", "stderr": "err:�"}
+
+
 def test_explicit_cmd_quotes_and_filtered_host_environment(workbench, monkeypatch):
     sessions, _, broker, project, scope, _ = workbench
     with sessions.begin() as db:
@@ -266,6 +384,9 @@ def test_conversation_http_reconnect_scope_and_stop(workbench, monkeypatch):
         assert client.get(route, headers={"X-Local-Token": "wrong"}).status_code == 401
         assert client.post(f"{root}/other/execution-jobs/{job.id}/stop").status_code == 404
         assert client.get(f"{root}/s/execution-jobs").json()[0]["id"] == job.id
+        invalid = client.get(route, params={"after": first["job"]["last_cursor"] + 10000})
+        assert invalid.status_code == 409 and invalid.json()["code"] == "EXECUTION_LOG_CURSOR_INVALID"
+        assert client.get(route).status_code == 200
         assert client.post(route + "/stop").status_code == 202
         assert _terminal(broker, scope, job.id).state == "cancelled"
         assert client.get(route, params={"after": first["next_cursor"]}).json()["job"]["active_processes"] == 0
@@ -274,8 +395,9 @@ def test_conversation_http_reconnect_scope_and_stop(workbench, monkeypatch):
 
 
 @pytest.mark.parametrize("language", ["python", "typescript"])
-def test_unfamiliar_project_failure_drives_repair_through_real_run_loop(workbench, language):
-    sessions, snapshot, _, project, scope, _ = workbench
+@pytest.mark.parametrize("entrypoint", ["command_start", "command_run"])
+def test_unfamiliar_project_failure_drives_repair_through_real_run_loop(workbench, language, entrypoint, monkeypatch):
+    sessions, snapshot, broker, project, scope, _ = workbench
     git = shutil.which("git.exe")
     if not git:
         pytest.skip("git.exe is required for independent diff verification")
@@ -312,12 +434,16 @@ def test_unfamiliar_project_failure_drives_repair_through_real_run_loop(workbenc
         path = outputs["search"]["facts"]["matches"][0]["path"]
         yield "unknown-tool", "unavailable_function", {}
         yield "read", "file_read", {"path": path}
+        assert outputs["read"]["facts"]["next_offset"] == len((project / filename).read_bytes().decode("utf-8"))
         yield "command-absolute", "command_start", {"argv": argv, "cwd": str(project)}
-        yield "first", "command_start", {"argv": argv}
+        yield "command-multiline", "command_start", {"shell_script": "@echo off\necho unchecked"}
+        yield "first", entrypoint, {"argv": argv}
         for suffix, expected in (("first", 1 if language == "python" else 2), ("second", 0)):
             if suffix == "second":
-                yield "second", "command_start", {"argv": argv}
+                yield "second", entrypoint, {"argv": argv}
             job_id = outputs[suffix]["facts"]["execution_job_id"]
+            if suffix == "first":
+                yield "invalid-cursor", "command_inspect", {"job_id": job_id, "after": 100000}
             cursor = 0
             log = ""
             for i in range(8):
@@ -351,6 +477,10 @@ def test_unfamiliar_project_failure_drives_repair_through_real_run_loop(workbenc
                         assert str(project) not in str(value), value
                     elif item["call_id"] == "unknown-tool":
                         assert value["status"] == "rejected" and value["error_code"] == "UNKNOWN_TOOL", value
+                    elif item["call_id"] == "invalid-cursor":
+                        assert value["status"] == "failed" and "Use after=0 or tail=true" in item["output"], value
+                    elif item["call_id"] == "command-multiline":
+                        assert value["status"] in {"failed", "rejected"} and "single Windows cmd command line" in item["output"], value
                     else:
                         assert value["status"] == "succeeded", (item["call_id"], value)
                     outputs[item["call_id"]] = value
@@ -411,5 +541,18 @@ def test_unfamiliar_project_failure_drives_repair_through_real_run_loop(workbenc
         provider = snapshot.get_artifact_representation(RESULT_ARTIFACT, LOG_REPRESENTATION).provider
         evidence = provider.execute(artifact, ArtifactRepresentationRequest(operation="read"), ArtifactRepresentationContext(lambda _: None))
         assert evidence.payload["job"]["root_exit_code"] == 0
+        # Artifact identity and exit evidence survive retention; output does not.
+        monkeypatch.setattr("engine.local_execution.broker._LOG_TTL_MS", 0)
+        broker._next_sweep = 0
+        expired = provider.execute(artifact, ArtifactRepresentationRequest(operation="read"), ArtifactRepresentationContext(lambda _: None))
+        assert expired.payload["job"]["id"] == evidence.payload["job"]["id"]
+        assert expired.payload["job"]["root_exit_code"] == 0
+        assert expired.payload["chunks"] == []
+        if evidence.payload["job"]["retained_bytes"]:
+            assert expired.payload["cursor_expired"]
+            assert expired.source_fingerprint != evidence.source_fingerprint
+        else:
+            assert not expired.payload["cursor_expired"]
+            assert expired.source_fingerprint == evidence.source_fingerprint
     finally:
         loop.close()

@@ -26,6 +26,10 @@ class ExecutionError(ValueError):
     """Expected local-execution failure with a user-safe message."""
 
 
+class LogCursorError(ExecutionError):
+    """A caller supplied a cursor that cannot belong to this Job's log."""
+
+
 def local_environment(overrides: dict[str, str] | None = None) -> dict[str, str]:
     env = {key.upper(): value for key, value in os.environ.items() if key.upper() in _ENVIRONMENT_KEYS}
     env.update({key.upper(): value for key, value in (overrides or {}).items()})
@@ -77,7 +81,7 @@ class PreparedCommand:
     identity: tuple[int, int, int, int]
     command_line: str
 
-    def display(self) -> dict:
+    def display(self) -> dict[str, object]:
         return {
             "executable": str(self.program),
             "cwd": str(self.directory),
@@ -88,7 +92,7 @@ class PreparedCommand:
             "interactive": self.input.interactive,
         }
 
-    def subject(self) -> dict:
+    def subject(self) -> dict[str, object]:
         return {
             **self.display(),
             "command": self.input.model_dump(mode="json"),
@@ -110,6 +114,8 @@ def prepare(input: StartInput, directory: Path) -> PreparedCommand:
             raise ExecutionError("Use shell_script to run Windows cmd with explicit shell approval.")
         command_line = subprocess.list2cmdline([str(program), *input.argv[1:]])
     else:
+        if any(character in input.shell_script for character in "\r\n"):
+            raise ExecutionError("Use a single Windows cmd command line, with && to chain commands, or invoke a .cmd/.bat file for a multiline script")
         program = shell
         # cmd's /s rule removes the surrounding pair. The contents are the
         # complete, explicitly approved cmd script, with cmd's own syntax.

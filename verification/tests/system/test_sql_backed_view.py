@@ -1,5 +1,6 @@
 import pytest
 import duckdb
+import sqlite3
 
 from dlcs.dbfox_data.backend.sql.sql_backed_view import (
     SqlBackedFilter,
@@ -141,5 +142,32 @@ def test_global_search_reads_mixed_text_decimal_and_integer_columns(search, expe
         page = connection.execute(build_sql_backed_page_sql(**options).sql).fetchall()
         count = connection.execute(build_sql_backed_count_sql(**options).sql).fetchone()[0]
     assert [row[0] for row in page] == expected
+    assert count == len(expected)
+
+
+@pytest.mark.parametrize("dialect", ["sqlite", "duckdb"])
+@pytest.mark.parametrize("operator", ["contains", "starts_with", "ends_with", "search"])
+@pytest.mark.parametrize("needle", ["%", "_", "!", "a!%_", "' OR 1=1 --"])
+def test_literal_search_and_filter_patterns(dialect, operator, needle):
+    """SQL-backed pages and counts keep the snapshot's literal string semantics."""
+    values = [needle, "other", "aXYZ", "a!xx", "prefix" + needle, needle + "suffix"]
+    with (sqlite3.connect(":memory:") if dialect == "sqlite" else duckdb.connect(":memory:")) as connection:
+        connection.execute("CREATE TABLE patterns(value TEXT)")
+        connection.executemany("INSERT INTO patterns VALUES (?)", [(value,) for value in values])
+        options = dict(base_sql="SELECT value FROM patterns", dialect=dialect, columns=["value"])
+        if operator == "search":
+            options["search"] = needle
+        else:
+            options["filters"] = [SqlBackedFilter(column="value", operator=operator, value=needle)]
+        actual = [row[0] for row in connection.execute(build_sql_backed_page_sql(**options).sql).fetchall()]
+        count = connection.execute(build_sql_backed_count_sql(**options).sql).fetchone()[0]
+    match = {
+        "contains": lambda value: needle in value,
+        "search": lambda value: needle in value,
+        "starts_with": lambda value: value.startswith(needle),
+        "ends_with": lambda value: value.endswith(needle),
+    }[operator]
+    expected = [value for value in values if match(value)]
+    assert actual == expected
     assert count == len(expected)
 

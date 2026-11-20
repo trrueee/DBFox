@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from engine.agent.artifact import Artifact
 from engine.local_execution.broker import LocalExecutionBroker
+from engine.local_execution.command import LogCursorError
 from engine.local_execution.contracts import ExecutionScope, JobInput, WORKSPACE_KIND
 from engine.representation import (
     ArtifactRepresentationContext, ArtifactRepresentationDescriptor, ArtifactRepresentationError,
@@ -57,6 +58,8 @@ class ExecutionLogRepresentation:
             page = self.broker.page(
                 ExecutionScope(artifact.session_id, scope), payload.job_id, read.after, limit, tail=read.tail,
             )
+        except LogCursorError as exc:
+            raise ArtifactRepresentationError("INVALID_REQUEST", str(exc), status_code=409) from None
         except (KeyError, ValueError, OSError):
             raise ArtifactRepresentationError("SOURCE_UNAVAILABLE", "原执行任务或工作区已不可用。", status_code=409) from None
         return ArtifactRepresentationResult(

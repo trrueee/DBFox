@@ -107,7 +107,11 @@ export const zArtifactRelation = z.object({
 export const zArtifactRepresentationOperation = z.object({
     media_type: z.string().min(1).max(128).nullish(),
     name: z.string().regex(/^[a-z][a-z0-9_.-]{0,63}$/),
-    purpose: z.enum(['model_read', 'file']).nullish(),
+    purpose: z.enum([
+        'model_read',
+        'model_media',
+        'file'
+    ]).nullish(),
     result_kind: z.enum(['json', 'stream']).optional().default('json')
 });
 
@@ -218,6 +222,25 @@ export const zAttachmentSummary = z.object({
  */
 export const zBodyClearSecurityAuditApiV1DiagnosticsSecurityAuditClearPost = z.object({
     confirm_text: z.string()
+});
+
+/**
+ * BrowserTab
+ */
+export const zBrowserTab = z.object({
+    id: z.string().regex(/^tab_[0-9a-f]{32}$/),
+    title: z.string().max(240),
+    url: z.string().max(4096)
+});
+
+/**
+ * BrowserState
+ */
+export const zBrowserState = z.object({
+    current_tab_id: z.string(),
+    tabs: z.array(zBrowserTab).max(8),
+    title: z.string().max(240),
+    url: z.string().max(4096)
 });
 
 /**
@@ -548,6 +571,17 @@ export const zFunctionCallOutputPayload = z.object({
 });
 
 /**
+ * GrantStatus
+ */
+export const zGrantStatus = z.enum([
+    'active',
+    'paused',
+    'revoked',
+    'interrupted',
+    'expired'
+]);
+
+/**
  * JobView
  */
 export const zJobView = z.object({
@@ -688,6 +722,11 @@ export const zConversationPaginationResponse = z.object({
     items: zPaginationCursorResponse,
     runs: zPaginationCursorResponse
 });
+
+/**
+ * Permission
+ */
+export const zPermission = z.enum(['observe', 'control']);
 
 /**
  * PlanStepStatus
@@ -926,20 +965,6 @@ export const zConversationSessionResponse = z.object({
 });
 
 /**
- * MessagePayload
- */
-export const zMessagePayload = z.object({
-    artifact_refs: z.array(zArtifactReference).optional(),
-    completion_disposition: zCompletionDisposition.nullish(),
-    content: z.string().optional().default(''),
-    evidence: z.array(zEvidenceReference).optional(),
-    limitation_codes: z.array(zCompletionLimitationCode).optional(),
-    phase: z.enum(['commentary', 'final_answer']).nullish(),
-    references: z.array(zConversationInputReference).max(12).optional(),
-    role: z.enum(['user', 'assistant'])
-});
-
-/**
  * ResourceScopeRef
  *
  * Stable identity and freshness fence for one execution resource.
@@ -1038,23 +1063,6 @@ export const zFunctionCallOutputItem = z.object({
     status: zRunItemStatus,
     turn_id: z.string().nullish(),
     type: z.literal('function_call_output')
-});
-
-/**
- * MessageItem
- */
-export const zMessageItem = z.object({
-    completed_at: z.iso.datetime().nullish(),
-    created_at: z.iso.datetime(),
-    id: z.string(),
-    payload: zMessagePayload,
-    revision: z.int().gte(1).optional().default(1),
-    run_id: z.string(),
-    sequence: z.int().gte(0).optional().default(0),
-    session_id: z.string(),
-    status: zRunItemStatus,
-    turn_id: z.string().nullish(),
-    type: z.literal('message')
 });
 
 /**
@@ -1212,6 +1220,109 @@ export const zDiagnosticLogsResponse = z.object({
     policy: zDiagnosticPolicyResponse,
     security_audit: zSecurityAuditDiagnosticsResponse,
     sources: z.array(zDiagnosticLogSourceResponse)
+});
+
+/**
+ * SessionInputStatus
+ */
+export const zSessionInputStatus = z.enum([
+    'admitted',
+    'promoted',
+    'consumed',
+    'cancelled'
+]);
+
+/**
+ * InputDeliveryReceipt
+ *
+ * Read-only receipt of the existing SessionInput; never a second lifecycle.
+ */
+export const zInputDeliveryReceipt = z.object({
+    input_id: z.string(),
+    mode: zDeliveryMode,
+    status: zSessionInputStatus
+});
+
+/**
+ * MessagePayload
+ */
+export const zMessagePayload = z.object({
+    artifact_refs: z.array(zArtifactReference).optional(),
+    completion_disposition: zCompletionDisposition.nullish(),
+    content: z.string().optional().default(''),
+    delivery: zInputDeliveryReceipt.nullish(),
+    evidence: z.array(zEvidenceReference).optional(),
+    limitation_codes: z.array(zCompletionLimitationCode).optional(),
+    phase: z.enum(['commentary', 'final_answer']).nullish(),
+    references: z.array(zConversationInputReference).max(12).optional(),
+    role: z.enum(['user', 'assistant'])
+});
+
+/**
+ * MessageItem
+ */
+export const zMessageItem = z.object({
+    completed_at: z.iso.datetime().nullish(),
+    created_at: z.iso.datetime(),
+    id: z.string(),
+    payload: zMessagePayload,
+    revision: z.int().gte(1).optional().default(1),
+    run_id: z.string(),
+    sequence: z.int().gte(0).optional().default(0),
+    session_id: z.string(),
+    status: zRunItemStatus,
+    turn_id: z.string().nullish(),
+    type: z.literal('message')
+});
+
+/**
+ * ShareInput
+ */
+export const zShareInput = z.object({
+    duration_minutes: z.union([
+        z.literal(5),
+        z.literal(15),
+        z.literal(30)
+    ]).optional().default(15),
+    inventory_id: z.string().min(1).max(128),
+    permission: zPermission.optional().default('observe'),
+    replace_existing: z.boolean().optional().default(false)
+});
+
+/**
+ * TargetIdentity
+ */
+export const zTargetIdentity = z.object({
+    browser_channel: z.literal('msedge').nullish(),
+    executable: z.string().min(1).max(4096),
+    include_owned_dialogs: z.boolean().optional().default(true),
+    kind: z.enum(['window', 'browser']),
+    process_id: z.int().gte(1).nullish(),
+    process_started_at: z.int().gte(0).nullish(),
+    title: z.string().max(240),
+    window_handle: z.string().regex(/^[0-9a-f]{1,16}$/).nullish()
+});
+
+/**
+ * ComputerGrant
+ */
+export const zComputerGrant = z.object({
+    created_at: z.int(),
+    expires_at: z.int(),
+    id: z.string(),
+    permission: zPermission,
+    session_id: z.string(),
+    status: zGrantStatus,
+    target: zTargetIdentity,
+    version: z.string()
+});
+
+/**
+ * TargetOption
+ */
+export const zTargetOption = z.object({
+    inventory_id: z.string(),
+    target: zTargetIdentity
 });
 
 /**
@@ -1479,6 +1590,13 @@ export const zApiArtifactRepresentationStreamApiV1ArtifactsArtifactIdRepresentat
  */
 export const zAttachmentCapabilitiesApiV1AttachmentCapabilitiesGetResponse = zAttachmentCapabilities;
 
+/**
+ * Response List Computer Targets Api V1 Computer Targets Get
+ *
+ * Successful Response
+ */
+export const zListComputerTargetsApiV1ComputerTargetsGetResponse = z.array(zTargetOption);
+
 export const zListConversationsApiV1ConversationsGetQuery = z.object({
     limit: z.int().gte(1).lte(100).optional().default(50),
     offset: z.int().gte(0).optional().default(0)
@@ -1542,6 +1660,58 @@ export const zSelectConversationArtifactApiV1ConversationsConversationIdArtifact
  * Successful Response
  */
 export const zSelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostResponse = zArtifactSelectionResponse;
+
+export const zListComputerSharesApiV1ConversationsConversationIdComputerGetPath = z.object({
+    conversation_id: z.string()
+});
+
+/**
+ * Response List Computer Shares Api V1 Conversations  Conversation Id  Computer Get
+ *
+ * Successful Response
+ */
+export const zListComputerSharesApiV1ConversationsConversationIdComputerGetResponse = z.array(zComputerGrant);
+
+export const zShareComputerTargetApiV1ConversationsConversationIdComputerPostBody = zShareInput;
+
+export const zShareComputerTargetApiV1ConversationsConversationIdComputerPostPath = z.object({
+    conversation_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zShareComputerTargetApiV1ConversationsConversationIdComputerPostResponse = zComputerGrant;
+
+export const zRevokeComputerTargetApiV1ConversationsConversationIdComputerTargetIdDeletePath = z.object({
+    conversation_id: z.string(),
+    target_id: z.string().regex(/^computer_[0-9a-f]{32}$/)
+});
+
+/**
+ * Successful Response
+ */
+export const zRevokeComputerTargetApiV1ConversationsConversationIdComputerTargetIdDeleteResponse = z.void();
+
+export const zReadComputerBrowserApiV1ConversationsConversationIdComputerTargetIdBrowserGetPath = z.object({
+    conversation_id: z.string(),
+    target_id: z.string().regex(/^computer_[0-9a-f]{32}$/)
+});
+
+/**
+ * Successful Response
+ */
+export const zReadComputerBrowserApiV1ConversationsConversationIdComputerTargetIdBrowserGetResponse = zBrowserState;
+
+export const zPreviewComputerTargetApiV1ConversationsConversationIdComputerTargetIdPreviewGetPath = z.object({
+    conversation_id: z.string(),
+    target_id: z.string().regex(/^computer_[0-9a-f]{32}$/)
+});
+
+export const zStopComputerTargetApiV1ConversationsConversationIdComputerTargetIdStopPostPath = z.object({
+    conversation_id: z.string(),
+    target_id: z.string().regex(/^computer_[0-9a-f]{32}$/)
+});
 
 export const zListConversationEventsApiV1ConversationsConversationIdEventsGetPath = z.object({
     conversation_id: z.string()

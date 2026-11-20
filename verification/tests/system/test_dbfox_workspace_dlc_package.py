@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+import os
 from pathlib import Path
 import sys
 import time
@@ -150,6 +151,19 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
     assert error.value.code == "WORKSPACE_INVALID"
     assert str(workspace) not in str(error.value)
 
+    # Both interfaces use character positions, including supplementary Unicode
+    # and CRLF; callers do not have to infer a byte or line cursor.
+    text = "甲😀\r\nlast"
+    (workspace / "unicode.txt").write_bytes(text.encode("utf-8"))
+    reading = snapshot.get_operation("dbfox.workspace", "files.read").spec
+    first = reading.handler(reading.input_model(path="unicode.txt", limit=2), listing_context)
+    assert first.content == "甲😀" and first.next_offset == 2 and first.content_truncated
+    second = reading.handler(reading.input_model(path="unicode.txt", offset=first.next_offset), listing_context)
+    assert second.content == "\r\nlast" and second.next_offset == len(text) and not second.content_truncated
+    assert first.sha256 == second.sha256
+    with pytest.raises(DlcOperationError, match="reuse next_offset"):
+        reading.handler(reading.input_model(path="unicode.txt", offset=len(text) + 1), listing_context)
+
     scope = ResourceScopeRef(
         kind="dbfox.workspace.root",
         id="project-a",
@@ -190,6 +204,30 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
     )
     contributor = snapshot.context_contributors[0](None)
     assert len(contributor.build(contribution_input)) == 1
+    # A follow-up delivery must distinguish an actual modification from a read
+    # snapshot of the same bytes; both remain canonical, authorized Artifacts.
+    patch_observation = observation.model_copy(update={
+        "observation_id": "observation-edit", "artifact_id": "artifact-edit",
+        "artifact_type": "dbfox.workspace.code_patch",
+        "payload": {
+            "relativePath": "notes.txt", "sizeBytes": snapshot_file.size_bytes,
+            "newSha256": snapshot_file.sha256, "oldSha256": "0" * 64, "created": False,
+            "workspaceId": scope.id, "workspaceVersion": scope.version,
+        },
+    })
+    delivery_context = contribution_input.model_copy(update={
+        "recent_artifacts": (patch_observation, observation),
+    })
+    fragments = contributor.build(delivery_context)
+    assert len(fragments) == 2
+    assert fragments[0].provenance["artifact_id"] == "artifact-edit"
+    assert fragments[0].provenance["artifact_type"] == "dbfox.workspace.code_patch"
+    assert "workspace code modification: notes.txt" in fragments[0].content
+    assert fragments[1].provenance["artifact_type"] == "dbfox.workspace.file_snapshot"
+    assert "workspace file snapshot: notes.txt" in fragments[1].content
+    assert contributor.build(delivery_context.model_copy(update={
+        "resource_refs": (scope.model_copy(update={"version": "rebound"}),),
+    })) == ()
 
     tools = {item.tool.name: item.tool for item in snapshot.tools}
     for name in ("file_write", "file_edit", "file_delete", "file_move", "command_run"):
@@ -203,6 +241,7 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
             "content_truncated": False,
             "size_bytes": 15,
             "sha256": "a" * 64,
+            "next_offset": 15,
         },
         artifacts=[],
     )
@@ -256,6 +295,7 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
 
     (workspace / "notes.txt").write_text("changed", encoding="utf-8")
     assert contributor.build(contribution_input) == ()
+    assert contributor.build(delivery_context) == ()
     for provider, artifact in preview_artifacts:
         with pytest.raises(ArtifactRepresentationError) as changed:
             provider.execute(artifact, ArtifactRepresentationRequest(operation="read"), representation_context)
@@ -308,14 +348,6 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
     ]
     resolved.move_path("drafts/chapter.md", "drafts/renamed.md")
     resolved.delete_path("drafts/renamed.md")
-    command = resolved.run_command(
-        (sys.executable, "-c", "print('bounded command')"),
-        timeout_seconds=10,
-    )
-    assert command.exit_code == 0
-    assert command.timed_out is False
-    assert "bounded command" in command.output
-
     service_module = sys.modules[type(resolved).__module__]
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "must-not-leak")
     monkeypatch.setenv("DBFOX_ENGINE_TOKEN", "must-not-leak")
@@ -324,14 +356,23 @@ def test_workspace_dlc_owns_binding_resource_tools_and_file_operations(
     assert "DBFOX_ENGINE_TOKEN" not in command_environment
     if "PATH" in command_environment:
         assert command_environment["PATH"]
-    monkeypatch.setattr(service_module, "MAX_COMMAND_STREAM_BYTES", 4_096)
-    limited = resolved.run_command(
-        (sys.executable, "-c", "print('x' * 10000)"),
-        timeout_seconds=10,
-    )
-    assert limited.output_limit_exceeded is True
-    assert limited.truncated is True
-    assert len(limited.output.encode("utf-8")) <= service_module.MAX_COMMAND_OUTPUT_BYTES
+    if os.name == "nt":
+        with pytest.raises(service_module.WorkspaceError, match="Host Broker"):
+            resolved.run_command((sys.executable, "-c", "print('bounded command')"))
+    else:
+        command = resolved.run_command(
+            (sys.executable, "-c", "print('bounded command')"), timeout_seconds=10,
+        )
+        assert command.exit_code == 0
+        assert command.timed_out is False
+        assert "bounded command" in command.output
+        monkeypatch.setattr(service_module, "MAX_COMMAND_STREAM_BYTES", 4_096)
+        limited = resolved.run_command(
+            (sys.executable, "-c", "print('x' * 10000)"), timeout_seconds=10,
+        )
+        assert limited.output_limit_exceeded is True
+        assert limited.truncated is True
+        assert len(limited.output.encode("utf-8")) <= service_module.MAX_COMMAND_OUTPUT_BYTES
 
     bounded_dir = workspace / "bounded-dir"
     bounded_dir.mkdir()

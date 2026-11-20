@@ -434,6 +434,7 @@ class ToolInvocationRepository:
         error_code: str | None = None,
         error_message: str | None = None,
         retryable: bool = False,
+        media: list[dict[str, str]] | None = None,
     ) -> Observation:
         begin_agent_write(self.session)
         row = self.session.execute(
@@ -475,6 +476,7 @@ class ToolInvocationRepository:
             retryable=retryable,
             error_code=error_code,
             error_message=error_message,
+            media=media,
         )
         observation = AgentObservationRecord(
             id=f"observation_{uuid4().hex}",

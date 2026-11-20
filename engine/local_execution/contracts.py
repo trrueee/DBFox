@@ -40,7 +40,7 @@ class StartInput(Contract):
     )
     shell_script: str | None = Field(
         default=None, min_length=1, max_length=8000,
-        description="Optional Windows cmd script. Omit this field when using argv.",
+        description="One Windows cmd command line; use && to chain commands. Invoke a .cmd/.bat file for batch scripts. Omit when using argv.",
     )
     cwd: str = Field(
         default="", max_length=1024,

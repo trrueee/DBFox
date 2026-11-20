@@ -81,7 +81,7 @@ from engine.tools.runtime.base import (
 )
 from engine.tools.runtime.result import ToolOutcome, ToolReconciliation
 from engine.tools.runtime.admission import ToolAdmissionContext, ToolAdmissionDecision
-from engine.tools.runtime.observation import ToolObservationProjection
+from engine.tools.runtime.observation import ToolMediaReference as ToolMediaReference, ToolObservationProjection
 from engine.tools.runtime.semantics import ToolSemanticSpec
 
 TInput = TypeVar("TInput", bound=BaseModel)
@@ -463,6 +463,7 @@ __all__ = [
     "ToolAdmissionContext",
     "ToolAdmissionDecision",
     "ToolObservationProjection",
+    "ToolMediaReference",
     "ToolInputError",
     "ToolKey",
     "log_extension_diagnostic",

@@ -1,4 +1,4 @@
-# Stable DLC API v2; additive session-input capability approved 2026-10-27.
+# Stable DLC API v2; additive session input (2026-10-27) and model media (2026-11-17).
 ATTACHMENT_RESOURCE_KIND
 Artifact
 ArtifactDraft
@@ -73,6 +73,7 @@ ToolExecutionSpec
 ToolInputError
 ToolInputModel
 ToolKey
+ToolMediaReference
 ToolObservationProjection
 ToolOutcome
 ToolOutputModel

@@ -193,16 +193,26 @@ def _filter_expression(item: SqlBackedFilter) -> exp.Expression:
     if operator == "is_not_null":
         return exp.Not(this=exp.Is(this=left, expression=exp.Null()))
     if operator == "contains":
-        return exp.Like(this=left, expression=exp.Literal.string(f"%{item.value}%"))
+        return _literal_like(left, item.value, prefix="%", suffix="%")
     if operator == "starts_with":
-        return exp.Like(this=left, expression=exp.Literal.string(f"{item.value}%"))
+        return _literal_like(left, item.value, suffix="%")
     if operator == "ends_with":
-        return exp.Like(this=left, expression=exp.Literal.string(f"%{item.value}"))
+        return _literal_like(left, item.value, prefix="%")
     if operator in {"in", "not_in"}:
         raw_values = item.value if isinstance(item.value, list) else [item.value]
         expression = exp.In(this=left, expressions=[_literal(value) for value in raw_values])
         return exp.Not(this=expression) if operator == "not_in" else expression
     raise SqlBackedViewError("FILTER_OPERATOR_NOT_ALLOWED", f"Operator '{operator}' is not allowed.")
+
+
+def _literal_like(left: exp.Expression, value: Any, *, prefix: str = "", suffix: str = "") -> exp.Expression:
+    # These are literal string filters, as in snapshot views. SQLGlot owns SQL
+    # quoting; ESCAPE handles LIKE metacharacters independently of that quoting.
+    text = str(value).replace("!", "!!").replace("%", "!%").replace("_", "!_")
+    return exp.Escape(
+        this=exp.Like(this=left, expression=exp.Literal.string(prefix + text + suffix)),
+        expression=exp.Literal.string("!"),
+    )
 
 
 def _search_expression(
@@ -218,8 +228,7 @@ def _search_expression(
     expressions: list[exp.Expression] = []
     for column in searchable_columns:
         _ensure_column_allowed(column, allowed_columns, "FILTER_COLUMN_NOT_ALLOWED")
-        expressions.append(exp.Like(this=exp.cast(_column(column), "TEXT"),
-                                    expression=exp.Literal.string(f"%{normalized_search}%")))
+        expressions.append(_literal_like(exp.cast(_column(column), "TEXT"), normalized_search, prefix="%", suffix="%"))
     if not expressions:
         return None
 

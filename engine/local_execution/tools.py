@@ -43,7 +43,7 @@ def _scope(context: ToolRunContext | ToolAdmissionContext) -> ExecutionScope:
     return ExecutionScope(session_id, refs[0])
 
 
-def _status(job: dict) -> dict:
+def _status(job: dict[str, Any]) -> dict[str, Any]:
     return {
         "execution_job_id": job["id"],
         **{key: job[key] for key in (
@@ -53,7 +53,7 @@ def _status(job: dict) -> dict:
     }
 
 
-def _review(job: JobView) -> dict:
+def _review(job: JobView) -> dict[str, str]:
     return {"job_id": job.id, "executable": job.executable, "cwd": job.cwd}
 
 
@@ -71,7 +71,7 @@ class _BrokerTool:
         self.broker = broker
 
     @staticmethod
-    def _authorize(context: ToolRunContext, scope: ExecutionScope, subject: dict) -> ExecutionAuthority:
+    def _authorize(context: ToolRunContext, scope: ExecutionScope, subject: dict[str, Any]) -> ExecutionAuthority:
         authority = context.execution_authority
         if not isinstance(authority, ExecutionAuthority) or authority.invocation_id != context.invocation_id or not (
             context.approval_authorizes(subject, scope.workspace)
@@ -82,9 +82,10 @@ class _BrokerTool:
 
 class CommandStart(_BrokerTool, BaseTool[StartInput, JobView]):
     name = "command_start"
+    version = "2"
     description = (
         "Start a real Windows process in the authorized project and return a Job ID. Approval applies once. "
-        "Use argv for a direct .exe or shell_script for Windows cmd, pipelines, and .cmd/.bat scripts. "
+        "Use argv for a direct .exe or shell_script for one Windows cmd command line, pipelines, or invoking a .cmd/.bat file. "
         "Set non-secret env overrides if needed. Use interactive=true to keep stdin open. Foreground Jobs stop when the Run ends; request background "
         "only if the user wants it to outlive a successful Run. Use command_inspect to wait for real results."
     )
@@ -127,7 +128,7 @@ class CommandStart(_BrokerTool, BaseTool[StartInput, JobView]):
     def cancel(self, invocation_id: str) -> None:
         self.broker.cancel_invocation(invocation_id)
 
-    def project_observation(self, *, status, output, artifacts):
+    def project_observation(self, *, status: str, output: dict[str, Any], artifacts: list[Any]) -> ToolObservationProjection:
         if status != "success":
             return ToolObservationProjection(summary="命令启动失败。")
         facts = _status(output)
@@ -160,10 +161,12 @@ class CommandInspect(_BrokerTool, BaseTool[InspectInput, JobPage]):
                 if context.is_cancelled():
                     raise ToolInputError("The Job inspection was cancelled.")
                 time.sleep(0.15)
+        except ExecutionError as exc:
+            raise ToolInputError(str(exc)) from exc
         except (KeyError, ValueError, OSError) as exc:
             raise ToolInputError("The Job or log cursor is unavailable in this Workspace.") from exc
 
-    def project_observation(self, *, status, output, artifacts):
+    def project_observation(self, *, status: str, output: dict[str, Any], artifacts: list[Any]) -> ToolObservationProjection:
         if status != "success":
             return ToolObservationProjection(summary="无法查看命令输出。")
         facts = {**_status(output["job"]), **{key: output[key] for key in ("next_cursor", "cursor_expired", "has_more")}}
@@ -205,14 +208,14 @@ class CommandStdin(_BrokerTool, BaseTool[StdinInput, _JobWrite]):
         scope = _scope(context)
         try:
             self._authorize(context, scope, input.model_dump(mode="json"))
-            count = self.broker.write(scope, input.job_id, input.text, close=input.close)
+            count = self.broker.write(scope, input.job_id, input.text, close=input.close, is_cancelled=context.is_cancelled)
         except ExecutionError as exc:
             raise ToolInputError(str(exc)) from exc
         except (KeyError, ValueError, OSError) as exc:
             raise ToolInputError("The Job or Workspace is no longer available.") from exc
         return _JobWrite(job_id=input.job_id, bytes_written=count, stdin_closed=input.close)
 
-    def project_observation(self, *, status, output, artifacts):
+    def project_observation(self, *, status: str, output: dict[str, Any], artifacts: list[Any]) -> ToolObservationProjection:
         if status != "success":
             return ToolObservationProjection(summary="无法写入命令标准输入。")
         return ToolObservationProjection(summary="命令输入已写入。", facts=output, provider_payload=output)
@@ -248,7 +251,7 @@ class CommandStop(_BrokerTool, BaseTool[JobInput, JobView]):
         except (KeyError, ValueError, OSError) as exc:
             raise ToolInputError("The Job or stop authorization is no longer available.") from exc
 
-    def project_observation(self, *, status, output, artifacts):
+    def project_observation(self, *, status: str, output: dict[str, Any], artifacts: list[Any]) -> ToolObservationProjection:
         if status != "success":
             return ToolObservationProjection(summary="无法停止本机任务。")
         facts = _status(output)
@@ -295,7 +298,7 @@ class CommandResult(_BrokerTool, BaseTool[_ResultInput, JobView]):
             resource_refs=(scope.workspace,), relations=tuple(relations),
         ),))
 
-    def project_observation(self, *, status, output, artifacts):
+    def project_observation(self, *, status: str, output: dict[str, Any], artifacts: list[Any]) -> ToolObservationProjection:
         if status != "success":
             return ToolObservationProjection(summary="无法发布命令执行记录。")
         facts = _status(output)
@@ -357,7 +360,7 @@ class CommandEnvironment(_BrokerTool, BaseTool[_EnvironmentInput, _EnvironmentOu
             os=platform.platform(), architecture=platform.machine(), cwd=str(directory), programs=programs, markers=markers,
         )
 
-    def project_observation(self, *, status, output, artifacts):
+    def project_observation(self, *, status: str, output: dict[str, Any], artifacts: list[Any]) -> ToolObservationProjection:
         if status != "success":
             return ToolObservationProjection(summary="无法检查本机开发环境。")
         # The absolute cwd is useful to users. Agent Workspace inputs have a
@@ -375,9 +378,10 @@ def bind_command_run(broker: LocalExecutionBroker, legacy: BaseTool[Any, Any]) -
         name = "command_run"
         description = (
             "Run one approved Windows executable and wait for the process tree and output to finish. "
+            "Returns execution_job_id; use command_result to publish evidence and link file Artifact IDs. "
             "Use command_start and command_inspect for long-running jobs or explicit cmd shell scripts."
         )
-        version = "2"
+        version = "3"
         input_model = legacy.input_model
         output_model = legacy.output_model
         execution = _SPAWN.model_copy(update={"timeout_seconds": 330, "max_output_bytes": 400_000})
@@ -408,13 +412,13 @@ def bind_command_run(broker: LocalExecutionBroker, legacy: BaseTool[Any, Any]) -
                 argv=input.argv, cwd=PurePosixPath(input.cwd.strip().replace("\\", "/")).as_posix(),
                 exit_code=job.root_exit_code if job.state == "exited" else None,
                 timed_out=job.state == "timed_out", duration_ms=job.duration_ms, output=output[:65536],
-                truncated=truncated, output_limit_exceeded=False,
+                truncated=truncated, output_limit_exceeded=False, execution_job_id=job.id,
             )
 
-        def project_observation(self, *, status, output, artifacts):
+        def project_observation(self, *, status: str, output: dict[str, Any], artifacts: list[Any]) -> ToolObservationProjection:
             if status != "success":
                 return ToolObservationProjection(summary="项目命令执行失败。")
-            facts = {key: output[key] for key in ("exit_code", "timed_out", "duration_ms", "truncated")}
+            facts = {key: output[key] for key in ("exit_code", "timed_out", "duration_ms", "truncated", "execution_job_id")}
             content = output["output"][:8000]
             return ToolObservationProjection(
                 summary="项目命令已超时。" if output["timed_out"] else f"项目命令已结束，退出码 {output['exit_code']}。",

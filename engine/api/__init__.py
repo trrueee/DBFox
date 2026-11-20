@@ -9,6 +9,7 @@ from engine.api.dlc_operations import router as dlc_operations_router
 from engine.api.dlc_credentials import router as dlc_credentials_router
 from engine.api.dlc_activation import router as dlc_activation_router
 from engine.api.dlc_lifecycle import router as dlc_lifecycle_router
+from engine.api.computer import router as computer_router
 
 router = APIRouter(prefix="/api/v1")
 
@@ -22,6 +23,7 @@ router.include_router(dlc_operations_router)
 router.include_router(dlc_credentials_router)
 router.include_router(dlc_activation_router)
 router.include_router(dlc_lifecycle_router)
+router.include_router(computer_router)
 
 
 __all__ = ["router"]

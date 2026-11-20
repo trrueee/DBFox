@@ -125,8 +125,9 @@ async def lifespan(application: FastAPI) -> Any:
     agent_coordinator: SessionCoordinator | None = None
     base_snapshot = None
     local_execution = None
+    computer = None
     local_model = None
-    from engine.runtime_composition import compose_local_execution, set_active_runtime_snapshot
+    from engine.runtime_composition import compose_computer, compose_local_execution, set_active_runtime_snapshot
 
     startup_stage = "migrating"
     try:
@@ -139,8 +140,10 @@ async def lifespan(application: FastAPI) -> Any:
         _emit_startup_stage(startup_stage)
         base_snapshot = get_active_runtime_snapshot()
         runtime_snapshot, local_execution = compose_local_execution(base_snapshot, SessionLocal)
+        runtime_snapshot, computer = compose_computer(runtime_snapshot, SessionLocal)
         set_active_runtime_snapshot(runtime_snapshot)
         application.state.local_execution = local_execution
+        application.state.computer = computer
         local_model = ManagedLocalModel(private_runtime_root() / "local-model.json")
         application.state.local_model = local_model
         reconcile_credential_leases(
@@ -201,10 +204,13 @@ async def lifespan(application: FastAPI) -> Any:
             agent_coordinator.stop()
         if local_execution is not None:
             local_execution.close()
+        if computer is not None:
+            computer.close()
         if local_model is not None:
             local_model.close()
         application.state.local_model = None
         application.state.local_execution = None
+        application.state.computer = None
         set_active_runtime_snapshot(base_snapshot)
         application.state.agent_coordinator = None
         application.state.workbench_presentations = None
@@ -219,10 +225,13 @@ async def lifespan(application: FastAPI) -> Any:
         agent_coordinator.stop()
         if local_execution is not None:
             local_execution.close()
+        if computer is not None:
+            computer.close()
         if local_model is not None:
             local_model.close()
         application.state.local_model = None
         application.state.local_execution = None
+        application.state.computer = None
         set_active_runtime_snapshot(base_snapshot)
         application.state.agent_coordinator = None
         application.state.workbench_presentations = None

@@ -12,9 +12,10 @@ from sqlalchemy.orm import Session
 from engine.agent.events import RuntimeEvent, RuntimeEventType, validate_runtime_event_payload
 from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.run import SessionLeaseConflict
+from engine.agent.run_item import MessageItem, dump_run_item, input_delivery_receipt
 from engine.agent.session import SessionLease
 from engine.json_codec import canonical_dumps, load_object
-from engine.models import AgentEventRecord, AgentRun, AgentRunItemRecord, AgentSession
+from engine.models import AgentEventRecord, AgentRun, AgentRunItemRecord, AgentSession, AgentSessionInput
 
 
 EVENT_REPLAY_RETAINED = 2_000
@@ -41,6 +42,20 @@ class EventHistoryGap(RuntimeError):
 class EventRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
+
+    def publish_input_delivery(self, admitted: AgentSessionInput, *, now: datetime) -> None:
+        """Update the same durable user item in the input owner's transaction."""
+        aggregate = self._session_for_update(str(admitted.session_id))
+        record = self.session.get(AgentRunItemRecord, str(admitted.message_id))
+        if record is None:
+            raise RuntimeError("SessionInput has no canonical user message projection")
+        item = MessageItem.model_validate(load_object(str(record.item_json)))
+        item.payload.delivery = input_delivery_receipt(admitted)
+        item.revision = int(record.revision) + 1
+        self.append_locked(
+            aggregate, RuntimeEventType.RUN_ITEM_UPDATED, run_id=str(admitted.run_id),
+            payload={"item": dump_run_item(item)}, now=now,
+        )
 
     def list(self, session_id: str, *, after_sequence: int = 0, limit: int = 500) -> list[RuntimeEvent]:
         aggregate = self.session.get(AgentSession, session_id)

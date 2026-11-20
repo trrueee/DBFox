@@ -16,10 +16,11 @@ from engine.agent.context_budget import (
 from engine.agent.definition import AgentDefinition
 from engine.agent.guidance import MaterializedCapabilityGuidance
 from engine.agent.model.system_prompt import build_system_prompt
+from engine.agent.model_media import media_token_reservation
 from engine.json_codec import canonical_dumps
 
 
-PROMPT_VERSION = "4.1"
+PROMPT_VERSION = "4.3"
 MAX_EVIDENCE_LEDGER_OBSERVATIONS = 8
 MAX_EVIDENCE_LEDGER_FACT_CHARS = 512
 
@@ -87,6 +88,7 @@ class PromptAssembler:
                 omitted_turn_ids=omitted_turn_ids,
             )
             response_item_tokens = estimate_input_items_tokens(response_items)
+            media_tokens = media_token_reservation(response_items)
             steer_tokens = estimate_input_items_tokens(steer_items)
             ledger_tokens = estimate_input_items_tokens(
                 [evidence_ledger] if evidence_ledger else []
@@ -100,6 +102,7 @@ class PromptAssembler:
                         + response_item_tokens
                         + ledger_tokens
                         + steer_tokens
+                        + media_tokens
                     ),
                 )
             except ContextBudgetExceeded:
@@ -162,6 +165,7 @@ class PromptAssembler:
                 "tool_schema_tokens": schema_tokens,
                 "tool_schema_count": len(tool_schemas or []),
                 "response_item_tokens": response_item_tokens,
+                "model_media_reserved_tokens": media_tokens,
                 "consumed_steer_tokens": steer_tokens,
                 "consumed_steer_count": len(steer_items),
                 "evidence_ledger_tokens": ledger_tokens,

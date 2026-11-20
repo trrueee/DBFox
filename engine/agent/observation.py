@@ -51,6 +51,7 @@ def serialize_model_observation(
     retryable: bool,
     error_code: str | None = None,
     error_message: str | None = None,
+    media: list[dict[str, str]] | None = None,
 ) -> str:
     """Build the single canonical function result shown to the model."""
 
@@ -65,4 +66,6 @@ def serialize_model_observation(
         value["error_code"] = error_code
     if error_message:
         value["error_message"] = error_message
+    if media:
+        value["media"] = media
     return canonical_dumps(value)

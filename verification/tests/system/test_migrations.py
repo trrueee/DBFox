@@ -36,7 +36,7 @@ pytestmark = pytest.mark.migration
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "f8a9b0c1d2ee"
+FOUNDATION_HEAD_REVISION = "1a7bf08d53c2"
 LLM_TELEMETRY_REVISION = "4e7f9a1b2c3d"
 LEGACY_METADATA_RETIREMENT_BASE_REVISION = "d3e4f5a6b709"
 HISTORICAL_MODELS_REVISION = "918ea80d"
@@ -175,6 +175,17 @@ def _column_names(engine, table_name: str) -> set[str]:
 def _assert_final_contract(engine) -> None:
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
+
+    assert _column_names(engine, "computer_grants") == {
+        "id", "session_id", "version", "engine_generation", "target_kind",
+        "target_json", "permission", "status", "created_at", "expires_at",
+    }
+    assert any(
+        foreign_key["constrained_columns"] == ["session_id"]
+        and foreign_key["referred_table"] == "agent_sessions"
+        and foreign_key["options"].get("ondelete") == "CASCADE"
+        for foreign_key in inspector.get_foreign_keys("computer_grants")
+    )
 
     assert "foundation_runtime_state" in tables
     assert {column["name"] for column in inspector.get_columns("foundation_runtime_state")} == {

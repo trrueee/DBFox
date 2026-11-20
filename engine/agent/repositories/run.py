@@ -186,6 +186,7 @@ class RunRepository:
         if admitted is not None:
             admitted.status = SessionInputStatus.CANCELLED.value
             admitted.consumed_at = now
+            self.sessions.events.publish_input_delivery(admitted, now=now)
         if assistant is not None:
             assistant.status = "cancelled"
             assistant.updated_at = now
@@ -663,6 +664,7 @@ class RunRepository:
         message.updated_at = now
         admitted.status = SessionInputStatus.CONSUMED.value
         admitted.consumed_at = now
+        self.sessions.events.publish_input_delivery(admitted, now=now)
         run.status = RunStatus.COMPLETED.value
         run.version = int(run.version or 0) + 1
         run.result_json = _json(response.model_dump(mode="json"))
@@ -760,6 +762,7 @@ class RunRepository:
         if admitted is not None:
             admitted.status = SessionInputStatus.CONSUMED.value
             admitted.consumed_at = now
+            self.sessions.events.publish_input_delivery(admitted, now=now)
         self.session.flush()
         if assistant is not None and str(assistant.content or ""):
             self.sessions.events.append(

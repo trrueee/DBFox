@@ -141,7 +141,7 @@ export interface WorkspaceDockTab {
         authority?: RequestedResourceRef;
         locator?: string;
       }
-    | { type: "artifact"; id: string }
+    | { type: "artifact"; id: string; /** Canonical evidence identity; payload stays in the conversation projection. */ evidenceId?: string }
     | { type: "conversation"; id: string };
   stateKey?: string;
   /** Selected content view within this Tab; the Tab never owns domain payload. */
@@ -206,7 +206,7 @@ export interface ArtifactRepresentationDescriptor {
     name: string;
     result_kind?: "json" | "stream";
     media_type?: string | null;
-    purpose?: "model_read" | "file" | null;
+    purpose?: "model_read" | "model_media" | "file" | null;
   }[];
 }
 

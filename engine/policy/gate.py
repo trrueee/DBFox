@@ -80,6 +80,8 @@ def _rule_capabilities(
     permitted = _AGENT_KERNEL_CAPABILITIES
     if tool.spec.execution.backend == "isolated_process" or gate.registry.host_supervises_process(tool_name):
         permitted = permitted | {"subprocess"}
+    if gate.registry.host_supervises_computer(tool_name):
+        permitted = permitted | {"computer_read", "computer_control"}
     forbidden = sorted(capabilities - permitted)
     if forbidden:
         return PolicyDecision(
