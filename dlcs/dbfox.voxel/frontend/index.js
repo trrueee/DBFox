@@ -231,7 +231,7 @@ function SliceCanvas({ snapshot, activeLayer, brush, axis, slice, mode, disabled
       "aria-label": "体素切片：方向键移动，空格绘制或选择，Delete 擦除", "aria-disabled": disabled,
       style: { aspectRatio: `${columns} / ${rows}` }, onPointerDown: down, onPointerMove: move,
       onPointerUp: up, onPointerCancel: cancel, onLostPointerCapture: cancel, onKeyDown: keydown }),
-    h("p", { className: "voxel-caption" }, `${["X", "Y", "Z"][a]} → · ${["X", "Y", "Z"][b]} ↑　`,
+    h("p", { className: "voxel-caption" }, `${["X", "Y", "Z"][a]} → · ${["X", "Y", "Z"][b]} ↑\u3000`,
       `光标 ${slicePoint(axis, slice, ...cursor).join(", ")} · 当前层`,
       h("span", null, mode === "select" ? "拖动选择矩形；不会修改方块。" : mode === "erase" ? "拖动擦除矩形；释放后提交一次修改。" : "拖动填充矩形；释放后提交一次修改。")));
 }

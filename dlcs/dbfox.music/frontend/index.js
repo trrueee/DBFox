@@ -452,7 +452,7 @@ function AudioStudio({ projectId, source, showToast }) {
     error ? h("p", { className: "dbfox-music-studio__error", role: "alert" }, error) : null);
 }
 
-function EmptyStudio({ projectId }) {
+function EmptyStudio() {
   return h("div", { className: "dbfox-music-start" },
     h(host.ui.Icon, { name: "music", size: 20 }),
     h("h2", null, "Start with an idea"),

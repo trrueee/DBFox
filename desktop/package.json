@@ -22,6 +22,7 @@
     "generate:api": "node ./scripts/generate-api.mjs",
     "check:bundle": "node ./scripts/check-bundle-budget.mjs",
     "lint": "eslint . && node ./scripts/check-design-contracts.mjs && npm run check:icons",
+    "lint:dlcs": "node ./scripts/lint-dlcs.mjs",
     "typecheck:test": "tsc --project tsconfig.test.json --noEmit",
     "preview": "vite preview",
     "test:sidecar": "node ./scripts/smoke-sidecar.mjs",

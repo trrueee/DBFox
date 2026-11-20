@@ -1,7 +1,7 @@
 {
   "manifestSchemaVersion": 2,
   "id": "dbfox.github",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "displayName": "DBFox GitHub",
   "publisher": "dbfox",
   "description": "Public, read-only GitHub repository resources for DBFox.",

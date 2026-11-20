@@ -323,15 +323,6 @@ function StoryWorkbench({ projectId }) {
     }
   };
 
-  const treeRoot = {
-    id: "story-root",
-    label: state.world?.title || "故事世界",
-    branches: [
-      { id: "branch-character", label: "人物", kind: "character" },
-      { id: "branch-scene", label: "场景", kind: "scene" },
-      { id: "branch-plotline", label: "情节线", kind: "plotline" },
-    ],
-  };
   const items = new Map();
   const kindBranches = [
     { id: "branch:character", label: "人物", kind: "character" },

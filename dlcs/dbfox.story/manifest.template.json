@@ -1,7 +1,7 @@
 {
   "manifestSchemaVersion": 2,
   "id": "dbfox.story",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "displayName": "DBFox Story",
   "publisher": "dbfox",
   "description": "Long-form fiction workbench: queryable story worlds, AI-proposed relationship graphs with batch review, and immutable revisions.",

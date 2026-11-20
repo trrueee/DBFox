@@ -1,7 +1,7 @@
 {
   "manifestSchemaVersion": 2,
   "id": "dbfox.voxel",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "displayName": "Voxel World Studio",
   "publisher": "dbfox",
   "description": "Versioned voxel worlds with bulk geometry tools, layer editing, and immutable snapshots.",

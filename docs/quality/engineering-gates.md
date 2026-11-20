@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-21
+> 最后核验：2026-11-18
 >
 > 适用范围：本地检查、持续集成、依赖锁定和工程门禁
 >
@@ -18,9 +18,22 @@
 4. 在独立 `.build_venv` 中执行完整 PyInstaller sidecar 构建；
 5. 前端的 `npm ci`、ESLint、Vitest、Electron Main/真实 Python supervisor smoke、未激活 DLC asset
    protocol 403 证明、TypeScript/Vite build；
-6. API client 二次生成稳定、锁文件审计和三平台 Electron packaged release contract。
+6. API client 二次生成稳定、锁文件审计和三平台 Electron packaged release contract；
+7. 强制 Windows 本机执行合同：安装锁定 Python/Node 依赖，先断言支持原生 Job，再运行真实进程与 Workspace 变更用例，不能通过平台 skip 变绿。
 
 CI 只授予 `contents: read`，每个第三方 GitHub Action 固定到完整提交 SHA，且 checkout 不保留凭据。真实 LLM、外部集成和端到端测试保留给受控环境，不作为普通 PR 的隐式依赖。
+
+电脑操作的 `test_computer_browser.py`、`test_computer_native.py` 同样归入 `platform_contract`，
+但需要 Windows 11 的可交互桌面及已安装的 Edge；现有 Windows managed local execution
+作业没有自动覆盖这两个用例，不能将该作业成功解释为电脑操作通过。独立桌面验收运行：
+
+```powershell
+python -m pytest verification/tests/system/test_computer_browser.py verification/tests/system/test_computer_native.py -q --tb=short
+```
+
+`test_computer_real_llm.py` 归入 `real_llm`，显式指定已有本地视觉模型配置和独立证据目录；
+不隐式下载模型、使用付费 API 或改写默认模型。当前本机结果见
+[电脑工作台验收记录](computer-workbench-verification.md)。
 
 `production-python-compatibility` 使用 `requirements-dev.lock` 提供测试工具，但与生产
 Sidecar 的 `.build_venv` 完全分离。这样既能证明生产解释器可运行完整确定性合同，也不会
@@ -42,6 +55,7 @@ python -m pytest verification/tests/agent_core -q --tb=short -m "not e2e and not
 cd desktop
 npm ci
 npm run lint
+npm run lint:dlcs
 npm run typecheck:test
 npm test -- --maxWorkers=1
 npm run test:electron
@@ -51,6 +65,8 @@ npm run build
 后端核心、迁移、工程契约和平台契约的测试集合必须互不重叠；CI 通过
 pytest marker 给每个 Node ID 唯一归属。`npm run lint` 同时执行 ESLint 和基于
 PostCSS AST 的 DBFox 设计令牌契约，不使用读取组件源码文本的伪单元测试。
+第一方 DLC 的 frontend 与 vendor-src JavaScript 通过独立 ESLint 配置执行推荐规则；生成 vendor 产物
+由已有构建和来源合同管理。不能用只匹配 TypeScript 的配置对 JavaScript 声称已检查。
 
 Sidecar 目标名称由 `build_sidecar.py` 的显式 OS/arch 映射生成，并由 Electron Main 的 manifest/hash
 校验消费；桌面构建不依赖外部编译器推断平台名称。
@@ -86,6 +102,6 @@ uv pip compile --universal --generate-hashes --python-version $dbfoxSidecarPytho
 
 `.github/dependabot.yml` 已覆盖 pip、npm 和 GitHub Actions 的每周更新，依赖升级必须通过同一组门禁。
 
-pyflakes 覆盖 `engine`、`build_sidecar.py`、`conftest.py` 与 `scripts`；
+pyflakes 的生产门禁覆盖 `engine`、`build_sidecar.py` 与 `scripts`；
 mypy 覆盖整个 `engine` 与 `build_sidecar.py`。Tool、Conversation 和 Catalog
 不再使用 `ignore_errors`；新增生产模块必须同时通过对应门禁。

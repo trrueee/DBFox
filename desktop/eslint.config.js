@@ -6,7 +6,12 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'dist-electron', 'src/lib/api/generated']),
+  globalIgnores([
+    'dist', 'dist-electron', 'src/lib/api/generated',
+    'electron-app', 'electron-resources', 'release-electron',
+    'output', '.dbfox-sidecar-smoke-*',
+    '.electron-host-smoke-*', '.electron-packaged-smoke-*',
+  ]),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

@@ -208,7 +208,7 @@ function GithubFileBrowser({ projectId, binding }) {
       React.createElement("button", { type: "button", onClick: () => setReloadKey((value) => value + 1) }, "Retry")) : null,
     status === "ready" && entries.length === 0 ? React.createElement("p", null, "This directory is empty.") : null,
     status === "ready" && entries.length > 0
-      ? React.createElement(host.ui.Tree, {
+      ? React.createElement(extensionHost.ui.Tree, {
           key: path,
           rootItem,
           ariaLabel: path ? `GitHub directory ${path}` : "GitHub repository files",
