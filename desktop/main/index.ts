@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol, shell, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, protocol, shell, type IpcMainInvokeEvent } from "electron";
 import { appendFile, mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +19,7 @@ import { downloadExternalImage, persistImageAtomically } from "./externalImage";
 import { ProjectFolderAccess, validateDlcPackage } from "./nativeFiles";
 import { createDevelopmentEngineLauncher, createEngineHealthProbe, createPackagedEngineLauncher } from "./nodeEngineHost";
 import { developmentRendererUrl } from "./security";
+import { COMPUTER_STOP_ACCELERATOR, stopComputerTargets } from "./computerStop";
 
 const rendererUrl = app.isPackaged
   ? PACKAGED_RENDERER_URL
@@ -141,7 +142,7 @@ function registerEngineIpc(): void {
   });
   ipcMain.handle(DESKTOP_CHANNELS.getEngineStatus, (event) => {
     validateSender(event);
-    return supervisor.status();
+    return { ...supervisor.status(), computerStopShortcut: globalShortcut.isRegistered(COMPUTER_STOP_ACCELERATOR) };
   });
   ipcMain.handle(DESKTOP_CHANNELS.restartEngine, async (event) => {
     validateSender(event);
@@ -357,6 +358,12 @@ if (!primaryInstance) {
     registerDlcAssetProtocol(protocol, dlcAssetAuthority);
     registerEngineIpc();
     registerNativeIpc();
+    globalShortcut.register(COMPUTER_STOP_ACCELERATOR, () => {
+      if (supervisor.status().state !== "ready") return;
+      void stopComputerTargets(supervisor.config(), rendererOrigin).catch(() => {
+        dialog.showErrorBox("停止尚未获确认", "请在电脑面板中再次停止。若目标仍有操作，请退出 DBFox 以关闭执行环境。");
+      });
+    });
     mainWindow = createMainWindow();
     supervisor.subscribe((status) => {
       dlcAssetAuthority.clear();
@@ -485,6 +492,7 @@ function hasOnlySuccessfulStatuses(value: unknown, expectedIds: readonly string[
 }
 
 app.on("before-quit", (event) => {
+  globalShortcut.unregisterAll();
   if (updateInstallPrepared) {
     shutdownComplete = true;
     return;

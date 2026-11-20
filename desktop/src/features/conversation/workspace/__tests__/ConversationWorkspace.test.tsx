@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -12,6 +12,7 @@ import type {
   PlanItem,
 } from "../../../../types/conversation";
 import { ConversationWorkspace } from "../ConversationWorkspace";
+import { selectActiveWorkbenchReferences, useWorkspaceStore } from "../../../../stores/workspaceStore";
 
 const viewModel = vi.hoisted(() => ({
   current: {} as Record<string, unknown>,
@@ -40,6 +41,7 @@ describe("ConversationWorkspace", () => {
     HTMLElement.prototype.scrollTo = vi.fn();
     window.localStorage.clear();
     cleanup();
+    useWorkspaceStore.setState({ activeProjectId: "", mainSurfaceByProject: {}, workbenchByConversation: {} });
     viewModel.current = {
       detail: detail(),
       items: [] as ConversationRunItem[],
@@ -77,12 +79,35 @@ describe("ConversationWorkspace", () => {
     renderWorkspace();
     const card = screen.getByRole("alert", { name: "需要批准" });
     expect(card.closest(".conv-pinned-action")).toBeTruthy();
+    expect(screen.getAllByRole("alert", { name: "需要批准" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "等待你的批准" }));
+    expect(document.activeElement).toBe(card.closest(".conv-pinned-action"));
     fireEvent.click(screen.getByRole("button", { name: "批准执行" }));
     expect(viewModel.current.resolveApproval as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       "run-approval",
       "approval-1",
       true,
     );
+  });
+
+  it("preserves references added while an earlier input is awaiting admission", async () => {
+    let admit!: () => void;
+    viewModel.current.sendMessage = vi.fn(() => new Promise<void>(resolve => { admit = resolve; }));
+    const workspace = useWorkspaceStore.getState();
+    workspace.setActiveProject("project-1");
+    workspace.setProjectActiveConversation("project-1", "session-1");
+    const original = { artifactId: "artifact-first", label: "已提交的引用" };
+    const newer = { artifactId: "artifact-newer", label: "下一轮的引用" };
+    workspace.addWorkbenchReference(original);
+    renderWorkspace();
+    const input = screen.getByRole("textbox", { name: "继续提问" }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "检查第一份记录" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送：立即执行" }));
+    act(() => workspace.addWorkbenchReference(newer));
+    admit();
+    await waitFor(() => expect(input.value).toBe(""));
+    expect(selectActiveWorkbenchReferences(useWorkspaceStore.getState())).toEqual([original, newer]);
+    expect(screen.getByRole("button", { name: "下一轮的引用" })).toBeTruthy();
   });
 
   it("shows reconnecting content as stale without turning the run into a failure", () => {
@@ -94,7 +119,7 @@ describe("ConversationWorkspace", () => {
     renderWorkspace();
 
     expect(screen.getByRole("status")).toHaveTextContent("正在恢复实时连接");
-    expect(screen.getByText(/不会重放写操作/)).toBeInTheDocument();
+    expect(screen.getByText("任务状态以同步结果为准")).toBeInTheDocument();
     expect(screen.queryByText("实时连接已中断")).toBeNull();
   });
 
@@ -107,7 +132,7 @@ describe("ConversationWorkspace", () => {
     renderWorkspace();
 
     expect(screen.getByRole("status")).toHaveTextContent("正在读取最新状态");
-    expect(screen.getByText(/历史游标已失效/)).toBeInTheDocument();
+    expect(screen.getByText("任务状态以同步结果为准")).toBeInTheDocument();
     expect(screen.queryByText("实时连接已中断")).toBeNull();
   });
 
@@ -120,7 +145,7 @@ describe("ConversationWorkspace", () => {
     renderWorkspace();
 
     expect(screen.getByRole("status")).toHaveTextContent("已恢复最新状态");
-    expect(screen.getByText(/耐久快照同步/)).toBeInTheDocument();
+    expect(screen.queryByText("实时连接已中断")).toBeNull();
   });
 
   it("offers a snapshot refresh after a terminal stream failure", () => {
@@ -133,7 +158,8 @@ describe("ConversationWorkspace", () => {
     renderWorkspace();
     fireEvent.click(screen.getByRole("button", { name: "刷新最新状态" }));
 
-    expect(screen.getByRole("alert")).toHaveTextContent("实时连接已中断");
+    expect(screen.getByRole("status")).toHaveTextContent("实时连接已中断");
+    expect(screen.getByText("任务可能仍在运行")).toBeInTheDocument();
     expect(viewModel.current.openConversation as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("session-1");
   });
 
@@ -156,11 +182,8 @@ describe("ConversationWorkspace", () => {
         ["result-1"],
       );
     });
-    fireEvent.click(screen.getByRole("button", { name: "查看证据：查询结果" }));
-    expect(viewModel.current.selectArtifact as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      "session-1",
-      "result-1",
-    );
+    fireEvent.click(screen.getByRole("link", { name: "查看证据：查询结果" }));
+    expect(viewModel.current.selectArtifact as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
 
     viewModel.current = {
       ...viewModel.current,
@@ -169,10 +192,7 @@ describe("ConversationWorkspace", () => {
     };
     rendered.rerender(workspace());
     expect(screen.queryByRole("complementary", { name: "Artifact dock" })).toBeNull();
-    expect(viewModel.current.selectArtifact as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      "session-1",
-      "result-1",
-    );
+    expect(viewModel.current.selectArtifact as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
 
   it("loads artifacts referenced only by a Plan completion step", async () => {

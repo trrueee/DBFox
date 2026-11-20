@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useId, useInsertionEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useId, useInsertionEffect, useMemo, useRef, useState } from "react";
+import { ArrowDownIcon } from "@/components/icons";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Button, ErrorDetails } from "../../../components/ui";
 import { clearCspVirtualLayout, setCspVirtualLayout } from "../../../lib/cspVirtualLayout";
 import { getUserErrorMessage } from "../../../lib/api/client";
 import type {
   ConversationArtifact,
+  ConversationEvidence,
   ConversationRun,
   ConversationRunItem,
 } from "../../../types/conversation";
@@ -24,6 +26,9 @@ interface MessageListProps {
   onLoadOlderHistory?: () => Promise<unknown> | void;
   onOpenSqlConsole?: (sql?: string) => void;
   onSelectArtifact?: (artifactId: string) => void;
+  onOpenEvidence?: (evidence: ConversationEvidence) => void;
+  pinnedActionId?: string;
+  onFocusAction?: () => void;
   resolvingQuestionId?: string | null;
   questionError?: unknown;
   onResolveQuestion?: (
@@ -45,14 +50,19 @@ export function MessageList({
   onLoadOlderHistory,
   onOpenSqlConsole,
   onSelectArtifact,
+  onOpenEvidence,
+  pinnedActionId,
+  onFocusAction,
   resolvingQuestionId,
   questionError,
   onResolveQuestion,
   onScrolledChange,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const columnRef = useRef<HTMLDivElement>(null);
   const virtualLayoutId = `messages-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const pinnedToBottomRef = useRef(true);
+  const [showJump, setShowJump] = useState(false);
   const scrolledStateRef = useRef(false);
   const orderedRuns = useMemo(
     () => [...runs].sort((left, right) => left.session_sequence - right.session_sequence),
@@ -128,6 +138,7 @@ export function MessageList({
     (scrolled: boolean) => {
       if (scrolledStateRef.current === scrolled) return;
       scrolledStateRef.current = scrolled;
+      setShowJump(scrolled);
       onScrolledChange?.(scrolled);
     },
     [onScrolledChange],
@@ -150,10 +161,12 @@ export function MessageList({
     if (!node || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
       if (pinnedToBottomRef.current) scrollToBottom("auto");
+      else emitScrolledState(node.scrollHeight - node.scrollTop - node.clientHeight > BOTTOM_THRESHOLD_PX);
     });
-    observer.observe(node.firstElementChild || node);
+    observer.observe(node);
+    if (columnRef.current) observer.observe(columnRef.current);
     return () => observer.disconnect();
-  }, [scrollToBottom]);
+  }, [scrollToBottom, emitScrolledState]);
 
   const renderRun = (run: ConversationRun) => {
     const runItems = itemsByRunId.get(run.id) || [];
@@ -163,7 +176,16 @@ export function MessageList({
         items={runItems}
         artifacts={artifactsByRunId.get(run.id) || []}
         onOpenSqlConsole={onOpenSqlConsole}
-        onSelectArtifact={onSelectArtifact}
+        onSelectArtifact={onSelectArtifact ? artifactId => {
+          pinnedToBottomRef.current = false;
+          onSelectArtifact(artifactId);
+        } : undefined}
+        onOpenEvidence={onOpenEvidence ? evidence => {
+          pinnedToBottomRef.current = false;
+          onOpenEvidence(evidence);
+        } : undefined}
+        pinnedActionId={pinnedActionId}
+        onFocusAction={onFocusAction}
         resolvingQuestionId={resolvingQuestionId}
         questionError={questionError}
         onResolveQuestion={onResolveQuestion}
@@ -172,6 +194,7 @@ export function MessageList({
   };
 
   return (
+    <div className="conv-message-list">
     <div className="conv-message-scroll" ref={ref}>
       {showHistoryControl && (
         <div className="conv-history-control">
@@ -206,6 +229,7 @@ export function MessageList({
         </div>
       )}
       <div
+        ref={columnRef}
         className={`conv-message-column ${shouldVirtualize ? "is-virtualized" : ""}`}
         data-virtual-layout={shouldVirtualize ? virtualLayoutId : undefined}
       >
@@ -226,6 +250,11 @@ export function MessageList({
             })
           : orderedRuns.map((run) => <div key={run.id}>{renderRun(run)}</div>)}
       </div>
+    </div>
+    {showJump ? <Button type="button" variant="outline" size="sm" className="conv-jump-latest"
+      onClick={() => { pinnedToBottomRef.current = true; scrollToBottom(); emitScrolledState(false); }}>
+      <ArrowDownIcon size={16} aria-hidden="true" />回到最新
+    </Button> : null}
     </div>
   );
 }

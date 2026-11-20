@@ -27,6 +27,7 @@ import { getUserErrorMessage } from "../../../lib/api/client";
 import { riskLevelLabel } from "../../../lib/presentation";
 import type { ApprovalItem } from "../../../types/conversation";
 import "../../../components/agent-elements/agent-interaction.css";
+import { ComputerApprovalDetails } from "../../computer/ComputerApprovalDetails";
 
 interface ApprovalCardProps {
   approval: ApprovalItem;
@@ -118,7 +119,6 @@ export function ApprovalAuditCard({
   const approved = outcome === "approved" ? true : outcome === "rejected" ? false : undefined;
   const title = approvalOutcomeTitle(outcome);
   const [expanded, setExpanded] = useState(false);
-  const resolved = outcome === "approved" || outcome === "rejected";
   const decision = <ApprovalDecision title={title} message={approvalOutcomeMessage(outcome)} approval={approval} operation={operation} sql={sql} />;
   const decisionContent = <>
     {outcome === "approved" ? <ConfirmationAccepted>{decision}</ConfirmationAccepted>
@@ -136,10 +136,10 @@ export function ApprovalAuditCard({
       data-status={outcome}
     >
       <ApprovalOutcomeIcon outcome={outcome} />
-      {resolved ? <details className="agent-approval__history" onToggle={event => setExpanded(event.currentTarget.open)}>
+      <details className="agent-approval__history" onToggle={event => setExpanded(event.currentTarget.open)}>
         <summary><strong>{title}</strong><span>{operation}</span><CaretDownIcon size={16} aria-hidden="true" /></summary>
         {expanded ? <div className="agent-approval__history-body">{decisionContent}</div> : null}
-      </details> : decisionContent}
+      </details>
     </Confirmation>
   );
 }
@@ -205,6 +205,9 @@ function ApprovalOutcomeIcon({ outcome }: { outcome: ApprovalOutcome }) {
 function ApprovalOperation({ operation, sql, approval }: { operation: string; sql: string; approval: ApprovalItem }) {
   const parameters = approval.payload.requested_action.arguments;
   const review = approval.payload.requested_action.review;
+  if (review && typeof review === "object" && "kind" in review && review.kind === "computer") {
+    return <ComputerApprovalDetails review={review as Record<string, unknown>} />;
+  }
   if (review && typeof review === "object" && "executable" in review && typeof review.executable === "string") {
     const details = review as Record<string, unknown>;
     const args = parameters && typeof parameters === "object" ? parameters as Record<string, unknown> : {};

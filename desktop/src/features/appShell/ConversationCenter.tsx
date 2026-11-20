@@ -18,6 +18,7 @@ import { useAttachmentInput } from "../conversation/useAttachmentInput";
 import { openWorkbenchReference } from "../resources/openWorkbenchReference";
 import { captureWorkbenchInput } from "../resources/workbenchInput";
 import { ComposerContext } from "../conversation/workspace/ComposerContext";
+import { openComputerDock } from "../computer/openComputerDock";
 
 const ConversationWorkspace = lazy(() =>
   import("../conversation/workspace/ConversationWorkspace").then((module) => ({ default: module.ConversationWorkspace })),
@@ -62,12 +63,12 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
   const submitError = submitFailure?.projectId === activeProjectId && submitFailure.scopeId === activeScope ? submitFailure.error : null;
   const [pendingSubmission, setPendingSubmission] = useState<PendingSubmission | null>(null);
   const displayAsk = pendingAsk ?? askInputValue;
-  const ensureDraftConversation = async () => {
+  const ensureDraftConversation = async (title = "附件分析") => {
     const state = useWorkspaceStore.getState();
     const existing = selectActiveWorkbench(state).draftConversationId;
     if (existing) return existing;
     const capturedScope = state.ensureActiveWorkbenchScope();
-    const detail = await useConversationStore.getState().createAndOpenConversation(displayAsk.trim() || "附件分析");
+    const detail = await useConversationStore.getState().createAndOpenConversation(displayAsk.trim() || title);
     if (selectActiveWorkbenchScopeId(useWorkspaceStore.getState()) !== capturedScope) throw new Error("会话已切换。");
     useWorkspaceStore.getState().setDraftConversationId(detail.id);
     return detail.id;
@@ -183,7 +184,7 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
         }}
         onSubmitAsk={() => void handleSubmitAsk()}
         projectId={activeProjectId}
-        context={<ComposerContext busy={submitting || attachment.busy} />}
+        context={<ComposerContext busy={submitting || attachment.busy} onOpenComputer={async () => openComputerDock(await ensureDraftConversation("电脑任务"))} />}
         references={references}
         onAddAttachment={() => { setPendingSubmission(null); void attachment.add(); }}
         onOpenReference={(ref) => {

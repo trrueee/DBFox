@@ -108,7 +108,7 @@ describe("Host Artifact navigation through the canonical repository and store", 
     expect((await screen.findByRole("tab", { name: artifact.title })).getAttribute("aria-selected")).toBe("true");
     expect(await screen.findByTestId("actual-result-view")).toBeTruthy();
     expect(useWorkspaceStore.getState().mainSurfaceByProject[target.projectId]).toEqual(initialSurface);
-    fireEvent.click(screen.getByRole("button", { name: "加入对话上下文" }));
+    fireEvent.click(screen.getByRole("button", { name: "引用到输入框" }));
     const references = Object.values(useWorkspaceStore.getState().workbenchByConversation)
       .flatMap((workbench) => workbench.references);
     expect(references).toEqual([{

@@ -18,7 +18,9 @@ export const CONTENT_SECURITY_POLICY = [
   // Model-authored CSS and inline <style> elements remain forbidden.
   "style-src-attr 'unsafe-inline'",
   "connect-src 'self' http://127.0.0.1:* dlc-asset:",
-  "img-src 'self' data: https: dlc-asset:",
+  // Authenticated capture responses become short-lived, explicitly revoked
+  // object URLs in the renderer. They are images, never scripts or frames.
+  "img-src 'self' data: https: blob: dlc-asset:",
   "font-src 'self' dlc-asset:",
 ].join("; ");
 

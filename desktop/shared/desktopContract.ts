@@ -27,6 +27,7 @@ export const DESKTOP_CHANNELS = Object.freeze({
 export type EngineStartupState = "starting" | "restarting" | "ready" | "failed" | "stopped";
 
 export interface EngineStartupStatus {
+  computerStopShortcut?: boolean;
   state: EngineStartupState;
   error: string | null;
   stage: string | null;

@@ -161,11 +161,10 @@ describe("AgentTimeline", () => {
     expect(failureAlert.textContent).not.toContain("步骤完成");
     fireEvent.click(screen.getByRole("button", { name: "打开已保留工件：查询结果 result-1" }));
     expect(onSelectArtifact).toHaveBeenCalledWith("result-1");
-    expect(screen.getByText("已保存结果")).toBeTruthy();
-    expect(screen.queryByText("引用的数据来源")).toBeNull();
-    fireEvent.click(screen.getByText("已保存结果").closest("summary")!);
-    const savedPanel = screen.getByText("已保存结果").closest("details")!;
-    fireEvent.click(within(savedPanel).getByText("查询结果 result-1"));
+    expect(screen.queryByText("已保存结果")).toBeNull();
+    expect(screen.queryByText("引用来源")).toBeNull();
+    const results = screen.getByRole("group", { name: "本次成果" });
+    fireEvent.click(within(results).getByRole("button", { name: "查询结果 result-1" }));
     expect(onSelectArtifact).toHaveBeenCalledWith("result-1");
   });
 
@@ -213,8 +212,8 @@ describe("AgentTimeline", () => {
       [resultArtifact("result-1")],
     );
 
-    const outcome = screen.getByText("分析部分完成，已有结果仍可使用").closest('[role="status"]')!;
-    expect(outcome.textContent).toContain("分析部分完成，已有结果仍可使用");
+    const outcome = screen.getByText("任务部分完成，已有结果仍可使用").closest('[role="status"]')!;
+    expect(outcome.textContent).toContain("任务部分完成，已有结果仍可使用");
     expect(outcome.textContent).toContain("停止原因：已达到工具调用上限；现有证据不足以完成全部判断。");
     expect(container.querySelector(".conv-completion-limitation")).toBeNull();
     expect(screen.queryByText("已完成当前可验证的工作")).toBeNull();
@@ -251,9 +250,9 @@ describe("AgentTimeline", () => {
       [resultArtifact("result-1"), resultArtifact("result-2")],
     );
 
-    expect(screen.getByText("引用的数据来源")).toBeTruthy();
-    fireEvent.click(screen.getByText("引用的数据来源").closest("summary")!);
-    const sources = screen.getByText("引用的数据来源").closest("details")!;
+    expect(screen.getByText("引用来源")).toBeTruthy();
+    fireEvent.click(screen.getByText("引用来源").closest("summary")!);
+    const sources = screen.getByText("引用来源").closest("details")!;
     expect(sources.textContent).toContain("查询结果 result-2");
     expect(sources.textContent).not.toContain("查询结果 result-1");
     expect(sources.textContent).not.toContain("已保存结果");
@@ -291,6 +290,30 @@ describe("AgentTimeline", () => {
     // Live state is the spinner glyph itself, not a word.
     expect(container.querySelector(".animate-spin")).toBeTruthy();
     expect(screen.queryByText("运行中")).toBeNull();
+  });
+
+  it("keeps an opened activity group stable as calls arrive and preserves commentary barriers", () => {
+    const first = call(1);
+    const second = { ...call(2), id: "call-item-2", payload: { ...call(2).payload, call_id: "call-2", presentation: { ...call(2).payload.presentation, title: "执行检查" } } };
+    const third = { ...call(4), id: "call-item-3", payload: { ...call(4).payload, call_id: "call-3" } };
+    const view = renderTimeline([first]);
+    const trigger = screen.getByRole("button", { name: /读取订单结构/ });
+    fireEvent.click(trigger);
+    view.rerender(<AgentTimeline run={run()} items={[first, second, assistant("检查结果已取得。", "commentary", 3), third]} artifacts={[]} />);
+    expect(screen.getByRole("button", { name: /工作记录/ }).isSameNode(trigger)).toBe(true);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("button", { name: /^读取订单结构/ }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByText("检查结果已取得。").closest("[data-phase]")?.getAttribute("data-phase")).toBe("commentary");
+  });
+
+  it("shows steering adoption only after the durable input receipt changes", () => {
+    const message = user("也检查退款", 1);
+    message.payload.delivery = { input_id: "input-steer", mode: "steer", status: "admitted" };
+    const view = renderTimeline([message]);
+    expect(screen.getByText("补充已提交 · 等待采用")).toBeTruthy();
+    expect(screen.queryByText("已纳入后续处理")).toBeNull();
+    view.rerender(<AgentTimeline run={run()} items={[{ ...message, revision: 2, payload: { ...message.payload, delivery: { ...message.payload.delivery, status: "consumed" } } }]} artifacts={[]} />);
+    expect(screen.getByText("已纳入后续处理")).toBeTruthy();
   });
 
   it("preserves an explicitly opened tool when a real output settles it", () => {

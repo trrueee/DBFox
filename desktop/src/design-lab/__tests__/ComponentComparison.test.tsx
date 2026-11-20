@@ -66,7 +66,7 @@ describe("Design Lab verified source adoption", () => {
     chooseSelectOption("状态", "Partial + no results");
 
     const outcome = screen.getByRole("status");
-    expect(outcome.textContent).toContain("分析部分完成");
+    expect(outcome.textContent).toContain("任务部分完成");
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("button", { name: /打开已保留工件/ })).toBeNull();
   });

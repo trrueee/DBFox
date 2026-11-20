@@ -4,12 +4,19 @@ import type { ArtifactViewContribution } from "./types";
 import { asRecord } from "./types";
 import { CORE_ARTIFACT_VIEW_IDS } from "../../dlc/coreContributionIds";
 import { EXECUTION_LOG_REPRESENTATION, ExecutionArtifactView } from "./ExecutionArtifactView";
+import { ComputerArtifactView } from "../../computer/ComputerArtifactView";
+import { COMPUTER_REPRESENTATION } from "../../../lib/api/computer";
 
 /**
  * Reusable Host projections selected only by public Representation support.
  * Domain Artifact selectors and semantics remain in their owning DLC.
  */
 export const hostArtifactViews: ReadonlyArray<ArtifactViewContribution<unknown>> = [
+  {
+    id: CORE_ARTIFACT_VIEW_IDS.computerCapture, title: "电脑证据", priority: 90, surfaces: ["workspace"],
+    representationTypes: [COMPUTER_REPRESENTATION], parsePayload: asRecord,
+    render: (artifact, _payload, context) => <ComputerArtifactView key={artifact.id} artifact={artifact} context={context} />,
+  },
   {
     id: CORE_ARTIFACT_VIEW_IDS.executionLog,
     title: "运行输出",

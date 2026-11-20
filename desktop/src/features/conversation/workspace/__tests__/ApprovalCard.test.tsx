@@ -109,7 +109,7 @@ describe("ApprovalCard", () => {
   it.each([
     ["expired", "expired", "批准请求已过期", "请求到期后未执行该操作"],
     ["cancelled", "cancelled", "批准请求已取消", "请求已随任务停止"],
-  ] as const)("keeps %s distinct from a rejected decision", (status, decision, title, message) => {
+  ] as const)("keeps %s distinct from a rejected decision", async (status, decision, title, message) => {
     render(<ApprovalAuditCard approval={{
       ...approval,
       status,
@@ -117,7 +117,8 @@ describe("ApprovalCard", () => {
     }} />);
 
     expect(screen.getByText(title)).toBeInTheDocument();
-    expect(screen.getByText(new RegExp(message))).toBeInTheDocument();
+    fireEvent.click(screen.getByText(title).closest("summary")!);
+    expect(await screen.findByText(new RegExp(message))).toBeInTheDocument();
     expect(screen.queryByText("已拒绝")).not.toBeInTheDocument();
   });
 });

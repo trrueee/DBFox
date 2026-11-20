@@ -4,13 +4,16 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-11-07
+> 最后核验：2026-11-18
 >
 > 适用范围：启动、Agent Core、Capability DLC、Workbench、工具、事件、取消和恢复链路
 >
 > 配套总览：[当前系统架构](./system-overview.md)
 >
 > 边界治理：[DBFox Core Kernel 宪章](./core-kernel-constitution.md)
+
+Host 电脑能力的所有权与交互见[电脑操作与受控浏览器](./computer-use.md)，
+源码、模型、桌面和 Frozen 分层结果见[电脑工作台验收](../quality/computer-workbench-verification.md)。
 
 Workbench 导出后打开正式 Artifact 的调用链见[DLC 工件导航](./dlc-artifact-navigation.md)：
 `sdk/frontend` → `extensionHost` → 现有 Session/Run Artifact repository → `conversationStore`
@@ -80,6 +83,7 @@ flowchart TB
 | Workspace System DLC | workspace binding、路径 containment、file read/write/edit/grep | Project binding + frozen `dbfox.workspace.root` | file/patch artifacts、dock views | `dbfox.workspace/state.sqlite3` + 用户绑定目录 | 把 workspace root 写回 Project |
 | [本机开发执行](local-development-execution.md) | Windows 进程树监督、stdin、增量日志与执行证据 | 已批准的 Tool Invocation + Workspace 绑定代次 | Job、执行 Artifact、Dock 日志与停止 | Sidecar 元数据 SQLite + 当前进程句柄 | 重放非幂等启动、把目录边界当作系统隔离 |
 | [本地模型](local-model.md) | Ollama 安装、模型选择和推理生命周期 | 私有本机配置 + Run 模型摘要 | Responses 流和本地模型状态 | Sidecar + 模型存储盘 | 从本地模式自动回退云端、由 Renderer 选择本机运行端口 |
+| [电脑与浏览器](computer-use.md) | 对话共享、窗口/页面观察、逐次操作、停止与证据 | 目标授权 + 最新观察 + 正式 Approval | 图像/节点、操作和观察 Artifact、电脑 Dock | 既有 SQLite 授权 + Sidecar UIA/Playwright 句柄 | 第二套 RunLoop、审批、个人浏览器接管、把 Job 当安全沙箱 |
 | Story System DLC | 故事实体/关系/修订、Markdown 章节、版本历史与一致性完成约束 | frozen `dbfox.story.world` | 章节、确认事实、关系提案 | `dbfox.story/state.sqlite3` + private chapter Markdown | 读取待审/否决关系作为事实、跨 DLC 私取 Workspace resolver |
 | Music System DLC | Score/Audio Resource、不可变 Revision、作曲/转录 Tools、Piano Studio | Project + frozen Music ResourceRef | score/audio artifacts、notation/playback | `dbfox.music/state.sqlite3` + private audio | 向 Core 泄露 Note/Score/Piano 概念 |
 | Extension Runtime / Public SDK | 签名包校验、装载、贡献快照、Host 注册入口、API v2 与前端注入合同 | manifest + verified package + public contribution | owner-bound Tool/Resource/View contributions | installed registry + frozen runtime snapshot | 领域规则、跨 DLC 私有调用、第二套 Loop |
@@ -129,6 +133,7 @@ App Shell 组织文件夹项目与对话、固定 Main Surface、Dock registry�
 - `ProjectCreateForm` 打开 native canonical folder，以文件夹名创建/复用项目。opaque idempotency key 防止重复项目；路径仍只归 Workspace binding。不同路径可有相同项目名，迁移仅放开 name 唯一约束。
 - `dlcs/dbfox.workspace/frontend/index.js` 通过原有 `binding.get/create`、`files.list/read` 操作提供文件树与只读内容；有界目录/文本与 containment 校验保持在 owner 后端。过大目录明确显示部分结果，嵌套 lazy ancestors 用 Host Tree 加载。
 - Workspace 文件成果通过 owner 的 `backend/representation.py` 校验冻结来源、绑定版本和 hash 后分页读取，复用 Host FileContent；`file_search` 空 query 浏览一层、非空 query 递归查找，与 grep 共用目录项总量预算。
+- Tool、文件 operation 和 Representation 共用 `file_read_output`，offset/limit 按 Unicode 字符计，返回 next_offset；精确编辑保留 CRLF，换行不匹配时提供修正指引。
 - Workspace 的绑定目录是文件、搜索与命令共用的路径基准。目录参数留空或使用 `.` 指向项目根，返回的文件路径可直接用于后续操作。名称搜索的 `path_prefix` 选择目录，内容搜索也接受单个文件。路径拒绝由 owner 返回可修正的原因，Tool Observation 与文件操作 API 共用该反馈。目录解析复用 Python 的规范路径与包含关系校验，搜索作用域的设计参考 VS Code 的项目目录约束。[Python pathlib](https://docs.python.org/3.12/library/pathlib.html#pathlib.Path.resolve) · [VS Code RelativePattern](https://code.visualstudio.com/api/references/vscode-api#RelativePattern)
 - Workspace 写入前置条件统一在 `WorkspaceService`；无 hash 只能新建，覆盖在暂存完成后校验 hash，工具与 public operation 共用固定冲突，后者返回 409。Dock 直接使用规范 target，显式刷新目录与当前文件，并取消旧读取；分页冲突不拼接新版本。验证见 `test_workspace_mutation_safety.py`、`test_dbfox_workspace_dlc_package.py` 与 `dbfoxWorkspaceFixture.test.ts`。
 - `components/resources/ReferenceCard` / `ResourceIcon` 统一消息、输入框和结果引用；`FileContent` 复用 CodeMirror 官方 grammar 与已有 Markdown renderer，支持预览/源码/分栏。
@@ -142,13 +147,14 @@ App Shell 组织文件夹项目与对话、固定 Main Surface、Dock registry�
 
 Conversation Workspace 将同一 Session 投影为：
 
-- Message List：用户消息和最终回答；
-- Activity Feed：计划、分析、工具、恢复、等待和完成；
-- ApprovalCard/QuestionCard：正式等待交互；
-- ArtifactEvidencePanel：回答 citation 与来源；
-- ArtifactDock：SQL、安全、Result、Visualization、说明等交付物；只投影 canonical Artifact，不保存内容副本。
+- MessageList/AgentTimeline：按 canonical 顺序呈现用户消息、公开进展、折叠工作记录与丰富的最终回答；
+- ApprovalCard/AgentQuestion：当前等待项集中在输入上方，正文保留跳转入口；
+- MarkdownContent/ArtifactSources：逐处 Evidence 引用与通用来源集合；
+- Artifact Dock：按 Artifact ID 读取 owner 视图，引用导航额外携带可选 Evidence ID；不保存内容副本，也不暗改下一轮输入。
 
 Activity Feed 只使用公共 summary，不暴露 Provider 私有 reasoning。动态 Plan 以步骤状态显示，但不会强迫所有简单任务生成计划。
+
+输入回执复用 SessionInput 的现有状态，通过原用户 RunItem 的 revision 和事件发布；停止、断线与真实终态分别反馈。交互、所有权和兼容性见[Agent 对话合同](../specs/agent-conversation-flow.md)，验证见[实施记录](../quality/agent-conversation-flow-verification.md)。
 
 ### 4.4 API Client 与 Reducer
 

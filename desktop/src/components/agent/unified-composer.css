@@ -66,6 +66,7 @@
 }
 
 .dbfox-composer__attachment-action,
+.dbfox-composer__stop-action,
 .dbfox-composer__primary-action {
   width: calc(var(--density-control-height) + var(--space-1));
   height: calc(var(--density-control-height) + var(--space-1));
@@ -76,7 +77,8 @@
   box-shadow: none;
 }
 
-.dbfox-composer__attachment-action {
+.dbfox-composer__attachment-action,
+.dbfox-composer__stop-action {
   background: transparent;
   color: var(--color-text-secondary);
 }

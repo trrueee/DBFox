@@ -2,7 +2,9 @@ import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
+import { Portal as TooltipPortal } from "@radix-ui/react-tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
 import { remarkDbfoxCitations } from "./remarkDbfoxCitations";
 import { remarkSafeBreaks } from "./remarkSafeBreaks";
 import "./MarkdownContent.css";
@@ -36,8 +38,10 @@ const DBFOX_MARKDOWN_SCHEMA = {
 };
 
 interface MarkdownCitation {
+  id?: string;
   artifact_id: string;
   label?: string;
+  locator?: Record<string, unknown>;
 }
 
 interface ArtifactEmbedComponentProps {
@@ -48,74 +52,97 @@ function shortCitationLabel(label: string): string {
   return label.length > 24 || /[\n*#]/.test(label) ? "数据来源" : label;
 }
 
+// The renderer types stay stable while their callbacks/metadata change. Inline
+// function components here would remount focused links and embedded views.
+const MarkdownRenderingContext = createContext<{
+  citations: MarkdownCitation[];
+  renderCitation: (citation: MarkdownCitation, index: number) => ReactNode;
+  renderArtifact?: (artifactId: string) => ReactNode;
+} | null>(null);
+
+function MarkdownLink({ children, href }: { children?: ReactNode; href?: string }) {
+  const context = useContext(MarkdownRenderingContext);
+  if (!context) throw new Error("Markdown links require their rendering context");
+  const prefix = "#dbfox-citation:";
+  if (href?.startsWith(prefix)) {
+    const index = Number(href.slice(prefix.length));
+    const citation = context.citations[index];
+    return citation ? context.renderCitation(citation, index) : <span>〔来源不可用〕</span>;
+  }
+  return <a href={href} className="hifi-md-link" target="_blank" rel="noopener noreferrer">{children}</a>;
+}
+
+function MarkdownArtifactEmbed(properties: ArtifactEmbedComponentProps) {
+  const context = useContext(MarkdownRenderingContext);
+  if (!context) throw new Error("Markdown artifacts require their rendering context");
+  const artifactId = String(properties["data-artifact-id"] ?? "");
+  return <div className="hifi-md-artifact-embed" data-artifact-id={artifactId}>{context.renderArtifact?.(artifactId)}</div>;
+}
+
+const MARKDOWN_COMPONENTS = {
+  ...BASE_MARKDOWN_COMPONENTS,
+  a: MarkdownLink,
+  "dbfox-artifact-embed": MarkdownArtifactEmbed,
+} as Components;
+
 export function MarkdownContent({
   content,
+  streaming = false,
   className = "",
   citations = [],
   artifactRefs = [],
   onCitation,
+  onEvidence,
   renderArtifact,
   artifacts = [],
 }: {
   content: string;
+  streaming?: boolean;
   className?: string;
   citations?: MarkdownCitation[];
   artifactRefs?: Array<{ artifact_id: string }>;
   onCitation?: (artifactId: string) => void;
+  onEvidence?: (evidenceId: string) => void;
   renderArtifact?: (artifactId: string) => ReactNode;
   artifacts?: readonly Pick<ConversationArtifact, "id" | "type" | "title">[];
 }) {
-  const citationIndex = new Map<string, number>();
-  for (const citation of citations) {
-    if (!citationIndex.has(citation.artifact_id)) citationIndex.set(citation.artifact_id, citationIndex.size + 1);
-  }
-  const artifactOrder = Array.from(citationIndex.keys());
   const allowedArtifactEmbeds = artifactRefs.map((item) => item.artifact_id);
   const unreferencedCitations = citations.filter(
     (citation) => !content.includes(`{{cite:${citation.artifact_id}}}`),
   );
-  const components = {
-    ...BASE_MARKDOWN_COMPONENTS,
-    a: ({ children, href }) => {
-      const prefix = "#dbfox-artifact:";
-      if (href?.startsWith(prefix)) {
-        const artifactId = decodeURIComponent(href.slice(prefix.length));
-        const citation = citations.find((item) => item.artifact_id === artifactId);
-        const artifact = artifacts.find(item => item.id === artifactId);
-        const label = artifact?.title || citation?.label || "关联成果";
-        return (
-          <button
-            type="button"
-            className="hifi-md-citation"
-            aria-label={`查看证据：${label}`}
-            title={label}
-            onClick={() => onCitation?.(artifactId)}
-          >
-            <ResourceIcon name={artifact?.title} kind={artifact ? artifactKind(artifact.type, artifact.title) : "document"} size={14} />
-            <span className="hifi-md-citation__label">{artifact?.title || shortCitationLabel(label)}</span>
-            <span className="hifi-md-citation__index">{children}</span>
-          </button>
-        );
-      }
-      return <a href={href} className="hifi-md-link" target="_blank" rel="noopener noreferrer">{children}</a>;
-    },
-    "dbfox-artifact-embed": (properties: ArtifactEmbedComponentProps) => {
-      const artifactId = String(properties["data-artifact-id"] ?? "");
-      return (
-        <div className="hifi-md-artifact-embed" data-artifact-id={artifactId}>
-          {renderArtifact?.(artifactId)}
-        </div>
-      );
-    },
-  } as Components;
+  const renderCitation = (citation: MarkdownCitation, index: number) => {
+    const artifact = artifacts.find(item => item.id === citation.artifact_id);
+    const label = artifact?.title || citation.label || "关联成果";
+    const href = citation.id ? `#dbfox-evidence:${encodeURIComponent(citation.id)}` : `#dbfox-artifact:${encodeURIComponent(citation.artifact_id)}`;
+    return <Tooltip key={citation.id ?? `${citation.artifact_id}-${index}`}>
+      <TooltipTrigger asChild>
+        <a href={href} className="hifi-md-citation" data-evidence-id={citation.id} aria-label={`查看证据：${label}`}
+          onClick={event => {
+            event.preventDefault();
+            if (citation.id && onEvidence) onEvidence(citation.id);
+            else onCitation?.(citation.artifact_id);
+          }}>
+          <ResourceIcon name={artifact?.title} kind={artifact ? artifactKind(artifact.type, artifact.title) : "document"} size={14} />
+          <span className="hifi-md-citation__label">{artifact?.title || shortCitationLabel(label)}</span>
+          <sup className="hifi-md-citation__index">{index + 1}</sup>
+        </a>
+      </TooltipTrigger>
+      <TooltipPortal><TooltipContent className="hifi-md-citation-preview" side="top">
+        <strong>{label}</strong>
+        {citation.label && citation.label !== label ? <span>{citation.label}</span> : null}
+        <small>在工作台查看来源</small>
+      </TooltipContent></TooltipPortal>
+    </Tooltip>;
+  };
   return (
-    <div className={`hifi-markdown-content ${className}`.trim()}>
+    <MarkdownRenderingContext.Provider value={{ citations, renderCitation, renderArtifact }}>
+    <TooltipProvider delayDuration={350}><div className={`hifi-markdown-content ${className}`.trim()}>
       <ReactMarkdown
-        components={components}
+        components={MARKDOWN_COMPONENTS}
         remarkPlugins={[
           remarkGfm,
           remarkSafeBreaks,
-          [remarkDbfoxCitations, { artifactOrder, allowedArtifactEmbeds }],
+          [remarkDbfoxCitations, { citations, allowedArtifactEmbeds, streaming }],
         ]}
         rehypePlugins={[[rehypeSanitize, DBFOX_MARKDOWN_SCHEMA]]}
       >
@@ -124,26 +151,10 @@ export function MarkdownContent({
       {unreferencedCitations.length > 0 && (
         <nav className="hifi-md-sources" aria-label="回答证据">
           <span>证据</span>
-          {unreferencedCitations.map((citation) => {
-            const artifact = artifacts.find(item => item.id === citation.artifact_id);
-            const label = artifact?.title || citation.label || "关联成果";
-            return (
-            <button
-              key={citation.artifact_id}
-              type="button"
-              onClick={() => onCitation?.(citation.artifact_id)}
-              className="hifi-md-citation"
-              title={label}
-              aria-label={`查看证据：${label}`}
-            >
-              <ResourceIcon name={artifact?.title} kind={artifact ? artifactKind(artifact.type, artifact.title) : "document"} size={14} />
-              <span className="hifi-md-citation__label">{artifact?.title || shortCitationLabel(label)}</span>
-              <span className="hifi-md-citation__index">{citationIndex.get(citation.artifact_id)}</span>
-            </button>
-            );
-          })}
+          {unreferencedCitations.map(citation => renderCitation(citation, citations.indexOf(citation)))}
         </nav>
       )}
-    </div>
+    </div></TooltipProvider>
+    </MarkdownRenderingContext.Provider>
   );
 }

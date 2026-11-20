@@ -3,6 +3,7 @@ import {
 } from "@/components/icons";
 import { Button } from "../../../components/ui";
 import { MarkdownContent } from "../queryResult/MarkdownContent";
+import { ResourceIcon } from "../../../components/resources/resourcePresentation";
 import { ArtifactCard } from "./ArtifactCard";
 import { copyText } from "./artifactActions";
 import "./ArtifactViews.css";
@@ -29,7 +30,7 @@ export function MarkdownArtifactView({ artifact, onToast }: MarkdownArtifactView
   return (
     <ArtifactCard
       title={artifact.title}
-      badge="分析"
+      icon={<ResourceIcon name={artifact.title} kind="document" size={16} />}
       tone="insight"
       description={artifact.description}
       actions={

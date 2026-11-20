@@ -98,18 +98,20 @@
   gap: var(--space-1);
   min-width: 18px;
   min-height: 24px;
-  max-width: min(240px, 100%);
-  margin: 0 2px;
-  padding: 2px 7px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-row);
-  background: var(--surface-auxiliary);
+  max-width: min(180px, 100%);
+  margin: 0 3px;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--color-text-secondary);
   font-size: var(--ui-font-caption);
   font-weight: 400;
   line-height: var(--ui-line-caption);
   vertical-align: 0.08em;
   cursor: pointer;
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
 }
 
 .hifi-md-citation::after {
@@ -120,11 +122,14 @@
 
 .hifi-md-citation:hover {
   background: var(--control-bg-hover);
-  border-color: var(--control-border-hover);
+  color: var(--color-primary);
 }
 
 .hifi-md-citation__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hifi-md-citation__index { flex-shrink: 0; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.hifi-md-citation__index { flex-shrink: 0; color: var(--color-text-muted); font-size: var(--ui-font-micro); font-variant-numeric: tabular-nums; }
+.hifi-md-citation-preview { display: grid; gap: var(--space-2); max-width: min(320px, calc(100vw - 32px)); padding: var(--space-3); overflow-wrap: anywhere; }
+.hifi-md-citation-preview strong { font-weight: 500; }
+.hifi-md-citation-preview small { opacity: 0.75; font-size: var(--ui-font-micro); }
 
 .hifi-md-sources {
   display: flex;
@@ -142,18 +147,18 @@
   font-weight: 600;
 }
 
-.hifi-md-sources button {
+.hifi-md-sources .hifi-md-citation {
   min-height: 28px;
   padding: 3px 8px;
-  border: 1px solid var(--border-subtle);
+  border: 0;
   border-radius: 999px;
   background: var(--surface-raised);
   color: var(--color-primary);
   cursor: pointer;
 }
 
-.hifi-md-sources button:hover,
-.hifi-md-sources button:focus-visible {
+.hifi-md-sources .hifi-md-citation:hover,
+.hifi-md-sources .hifi-md-citation:focus-visible {
   border-color: var(--color-primary);
   background: var(--bg-active);
 }
@@ -180,7 +185,7 @@
 
 .hifi-md-table {
   width: 100%;
-  min-width: 560px;
+  min-width: 0;
   border-collapse: collapse;
   background: var(--surface-card);
   white-space: normal;

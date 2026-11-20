@@ -12,6 +12,7 @@ export function Composer({
   running,
   submitting = false,
   cancelling = false,
+  cancelError,
   error,
   onSend,
   onCancel,
@@ -25,6 +26,7 @@ export function Composer({
   running: boolean;
   submitting?: boolean;
   cancelling?: boolean;
+  cancelError?: unknown;
   error?: unknown;
   onSend: (
     text: string,
@@ -34,7 +36,7 @@ export function Composer({
   onCancel: () => Promise<void>;
   references?: readonly WorkbenchReference[];
   onRemoveReference?: (reference: WorkbenchReference) => void;
-  onClearReferences?: () => void;
+  onClearReferences?: (submittedReferences: readonly WorkbenchReference[]) => void;
   conversationId?: string;
   context?: ReactNode;
 }) {
@@ -62,7 +64,7 @@ export function Composer({
       const workspace = useWorkspaceStore.getState();
       if (workspace.workbenchByConversation[workbenchKey]?.draftInput === value) {
         workspace.setDraftInput("", workbenchKey);
-        onClearReferences?.();
+        onClearReferences?.(references ?? []);
       }
     } catch {
       // The mutation exposes a user-facing error; preserve the draft for retry.
@@ -73,6 +75,7 @@ export function Composer({
       <div className="conv-composer-rail">
         <UnifiedComposer
           value={value}
+          cancelError={cancelError}
           onChange={setValue}
           context={context}
           onSubmit={submit}

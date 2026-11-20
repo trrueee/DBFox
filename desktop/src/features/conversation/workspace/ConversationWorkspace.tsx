@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ApprovalItem } from "../../../types/conversation";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import type { ApprovalItem, ConversationEvidence, QuestionItem } from "../../../types/conversation";
+import { AgentQuestion } from "../../../components/agent-elements/AgentQuestion";
 import { Button, ErrorState, ShadcnSkeleton as Skeleton } from "../../../components/ui";
 import { getUserErrorMessage } from "../../../lib/api/client";
 import { Composer } from "./Composer";
@@ -15,6 +16,7 @@ import {
 import "./conversationWorkspace.css";
 import { openArtifactDock } from "../../../stores/artifactDockStore";
 import { useWorkbenchPresentation } from "../../resources/workbenchPresentation";
+import { openComputerDock } from "../../computer/openComputerDock";
 
 export function ConversationWorkspace({
   conversationId,
@@ -43,18 +45,19 @@ export function ConversationWorkspace({
     sendError,
     cancelRun,
     cancelling,
+    cancelError,
     resolveApproval,
     resolvingApprovalId,
     approvalError,
     resolveQuestion,
     resolvingQuestionId,
     questionError,
-    selectArtifact,
     loadRunArtifacts,
   } = useConversationViewModel(conversationId);
   useWorkbenchPresentation(conversationId, cancelling || runningRun?.status === "cancelling" ? undefined : runningRun?.id, items);
   const references = useWorkspaceStore(selectActiveWorkbenchReferences);
   const [contentScrolled, setContentScrolled] = useState(false);
+  const attentionId = useId();
   const removeWorkbenchReference = useWorkspaceStore((state) => state.removeWorkbenchReference);
   const clearWorkbenchReferences = useWorkspaceStore((state) => state.clearWorkbenchReferences);
 
@@ -65,12 +68,12 @@ export function ConversationWorkspace({
   const artifactRefsByRun = useMemo(() => {
     const refsByRun = new Map<string, Set<string>>();
     for (const item of items) {
-      const referencedArtifactIds = item.type === "plan"
-        ? item.payload.steps.flatMap((step) => step.artifact_ids ?? [])
-        : item.type === "function_call_output"
-          || (item.type === "message" && item.payload.role === "assistant")
-          ? item.payload.artifact_refs.map((reference) => reference.artifact_id)
-          : [];
+      let referencedArtifactIds: string[] = [];
+      if (item.type === "plan") referencedArtifactIds = item.payload.steps.flatMap(step => step.artifact_ids ?? []);
+      else if (item.type === "function_call_output") referencedArtifactIds = item.payload.artifact_refs.map(reference => reference.artifact_id);
+      else if (item.type === "message" && item.payload.role === "assistant") {
+        referencedArtifactIds = [...item.payload.artifact_refs, ...item.payload.evidence].map(reference => reference.artifact_id);
+      }
       if (referencedArtifactIds.length === 0) continue;
       const artifactIds = refsByRun.get(item.run_id) ?? new Set<string>();
       for (const artifactId of referencedArtifactIds) {
@@ -90,10 +93,18 @@ export function ConversationWorkspace({
   }, [artifactRefsByRun, conversationId, loadRunArtifacts]);
 
   const handleSelectArtifact = useCallback((artifactId: string) => {
-    void selectArtifact(conversationId, artifactId);
     const artifact = artifacts.find((candidate) => candidate.id === artifactId);
-    if (artifact) openArtifactDock(artifact);
-  }, [artifacts, conversationId, selectArtifact]);
+    openArtifactDock({ id: artifactId, title: artifact?.title ?? "关联成果" }, {
+      projectId: detail?.project_id ?? undefined, sessionId: conversationId, preview: true,
+    });
+  }, [artifacts, conversationId, detail?.project_id]);
+
+  const handleOpenEvidence = useCallback((evidence: ConversationEvidence) => {
+    const artifact = artifacts.find(candidate => candidate.id === evidence.artifact_id);
+    openArtifactDock({ id: evidence.artifact_id, title: artifact?.title ?? "引用来源" }, {
+      projectId: detail?.project_id ?? undefined, sessionId: conversationId, evidenceId: evidence.id, preview: true,
+    });
+  }, [artifacts, conversationId, detail?.project_id]);
 
   if (!detail) {
     return (
@@ -125,7 +136,10 @@ export function ConversationWorkspace({
   const pendingApprovals = items.filter(
     (item): item is ApprovalItem => item.type === "approval" && item.status === "waiting" && item.run_id === runningRun?.id,
   );
-  const pendingApproval = pendingApprovals[0];
+  const attention = runningRun?.status !== "cancelling" ? items.find(
+    (item): item is ApprovalItem | QuestionItem => (item.type === "approval" || item.type === "question")
+      && item.status === "waiting" && item.run_id === runningRun?.id,
+  ) : undefined;
 
   const conversationPane = (
     <section
@@ -150,33 +164,45 @@ export function ConversationWorkspace({
         onOpenSqlConsole={onOpenSqlConsole}
         onScrolledChange={setContentScrolled}
         onSelectArtifact={handleSelectArtifact}
+        onOpenEvidence={handleOpenEvidence}
+        pinnedActionId={attention?.id}
+        onFocusAction={() => document.getElementById(attentionId)?.focus({ preventScroll: false })}
         resolvingQuestionId={resolvingQuestionId}
         questionError={questionError}
         onResolveQuestion={resolveQuestion}
       />
-      {pendingApproval && runningRun && (
-        <div className="conv-pinned-action">
-          <ApprovalCard
-            approval={pendingApproval}
+      {attention && (
+        <div id={attentionId} className="conv-pinned-action" tabIndex={-1} aria-label="等待你的操作">
+          {attention.type === "approval" ? <ApprovalCard
+            key={attention.id}
+            approval={attention}
             pendingCount={pendingApprovals.length}
             onOpenSqlConsole={onOpenSqlConsole}
-            submitting={resolvingApprovalId === pendingApproval.id}
+            submitting={resolvingApprovalId === attention.id}
             error={approvalError}
             onResolve={resolveApproval}
-          />
+          /> : <AgentQuestion key={attention.id} question={attention}
+            submitting={resolvingQuestionId === attention.id} error={questionError}
+            onRespond={response => resolveQuestion(attention.run_id, attention.id, response)} />}
         </div>
       )}
       <Composer
         key={conversationId}
         conversationId={conversationId}
-        context={<ComposerContext busy={sending} />}
+        context={<ComposerContext busy={sending} onOpenComputer={() => openComputerDock(conversationId)} />}
         running={Boolean(runningRun)}
         submitting={sending}
-        cancelling={cancelling}
+        cancelling={cancelling || runningRun?.status === "cancelling"}
+        cancelError={cancelError}
         error={sendError}
         references={references}
         onRemoveReference={removeWorkbenchReference}
-        onClearReferences={() => clearWorkbenchReferences(conversationId)}
+        onClearReferences={submitted => {
+          const current = useWorkspaceStore.getState().workbenchByConversation[conversationId]?.references;
+          if (current?.length === submitted.length && current.every((reference, index) => reference === submitted[index])) {
+            clearWorkbenchReferences(conversationId);
+          }
+        }}
         onSend={async (text, mode, references) => {
           await sendMessage(
             conversationId,

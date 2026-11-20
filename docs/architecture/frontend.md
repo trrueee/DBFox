@@ -14,6 +14,8 @@
 
 前端是 Agent 公共事实的产品投影，而不是第二套 Runtime。它负责工作区导航、流式呈现、人机中断交互、工件浏览和当前页查询结果，但不自行决定 Run、Approval、Evidence 或 Artifact 的权威状态。
 
+2026-11-20 的对话信息流、独立停止、输入采用回执、逐处正文引用与 Dock 查证遵循[Agent 对话合同](../specs/agent-conversation-flow.md)。输入状态仍由 SessionInput 拥有，Evidence 与工件仍由后端消息和 owner Representation 拥有；阅读、展开与焦点只属于展示状态。
+
 ## 2. 分层架构
 
 ```mermaid

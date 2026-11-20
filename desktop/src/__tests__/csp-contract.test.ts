@@ -37,4 +37,12 @@ describe("desktop CSP network boundary", () => {
       "'unsafe-inline'",
     );
   });
+
+  it("permits local capture object URLs only as images", () => {
+    const directives = CONTENT_SECURITY_POLICY.split(";").map((item) => item.trim());
+    expect(directives.find((item) => item.startsWith("img-src "))?.split(" ")).toContain("blob:");
+    for (const name of ["script-src", "connect-src", "default-src", "object-src"]) {
+      expect(directives.find((item) => item.startsWith(`${name} `))).not.toContain("blob:");
+    }
+  });
 });

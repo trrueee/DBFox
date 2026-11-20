@@ -1,6 +1,7 @@
 import { lazy, useEffect, useMemo, useRef, useState } from "react";
 import {
   AtIcon,
+  ArrowLeftIcon,
   CheckIcon,
 } from "@/components/icons";
 import { Button, EmptyState, LoadingState, Tooltip, TooltipTrigger, TooltipContent } from "../../components/ui";
@@ -117,6 +118,17 @@ export function ArtifactDockContent({
   const artifactId = tab.target?.type === "artifact" ? tab.target.id : "";
   const referenced = useWorkspaceStore(state => selectActiveWorkbenchReferences(state).some(reference => reference.artifactId === artifactId));
   const artifact = useConversationStore((s) => s.artifactsById[artifactId]);
+  const evidenceId = tab.target?.type === "artifact" ? tab.target.evidenceId : undefined;
+  const evidence = useConversationStore(state => {
+    if (!evidenceId) return undefined;
+    const detail = state.detailById[tab.sessionId ?? artifact?.session_id ?? ""];
+    for (const item of detail?.items ?? []) {
+      if (item.type !== "message") continue;
+      const match = item.payload.evidence.find(candidate => candidate.id === evidenceId && candidate.artifact_id === artifactId);
+      if (match) return match;
+    }
+    return undefined;
+  });
   const loadArtifact = useConversationStore((s) => s.loadArtifact);
   const updateDockTab = useWorkspaceStore((s) => s.updateDockTab);
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
@@ -186,7 +198,7 @@ export function ArtifactDockContent({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label={referenced ? "已加入对话上下文" : "加入对话上下文"}
+          aria-label={referenced ? "已引用到输入框" : "引用到输入框"}
           disabled={referenced}
           onClick={() => {
             onAsk({
@@ -197,8 +209,24 @@ export function ArtifactDockContent({
         >
           {referenced ? <CheckIcon size={20} aria-hidden="true" /> : <AtIcon size={20} aria-hidden="true" />}
         </Button>
-        </TooltipTrigger><TooltipContent>{referenced ? "已加入对话上下文" : "加入对话上下文"}</TooltipContent></Tooltip>
+        </TooltipTrigger><TooltipContent>{referenced ? "已引用到输入框" : "引用到输入框"}</TooltipContent></Tooltip>
       </div>
+      {evidenceId ? <aside className="workspace-evidence-context" aria-label="引用依据" key={evidenceId}>
+        <div className="workspace-evidence-context__header">
+          <span className="workspace-evidence-context__eyebrow">回答中的依据</span>
+          <Button type="button" variant="ghost" size="sm" onClick={() => {
+            const findSource = () => Array.from(document.querySelectorAll<HTMLAnchorElement>("[data-evidence-id]"))
+              .find(element => element.dataset.evidenceId === evidenceId);
+            if (!findSource()) { showToast("请回到原对话查看这处引用。", "info"); return; }
+            useWorkspaceStore.getState().setDockOpen(false);
+            requestAnimationFrame(() => findSource()?.focus());
+          }}><ArrowLeftIcon size={14} aria-hidden="true" />返回原文</Button>
+        </div>
+        {evidence ? <>
+          <p>{evidence.label}</p>
+          {evidence.locator.kind === "artifact" ? <small>此引用关联完整结果，未记录更细的位置。</small> : null}
+        </> : <p role="status">此引用的上下文暂不可用，以下展示来源结果。</p>}
+      </aside> : null}
       <ArtifactViewHost
         artifact={envelope}
         surface="workspace"

@@ -221,3 +221,19 @@
   display: flex;
   justify-content: flex-end;
 }
+.workspace-evidence-context {
+  margin: var(--space-3) var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-card);
+  background: var(--surface-panel-muted);
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-control);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.workspace-evidence-context__eyebrow { color: var(--color-text-muted); font-size: var(--ui-font-caption); }
+.workspace-evidence-context__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.workspace-evidence-context__header button { min-width: 0; height: 28px; padding-inline: var(--space-2); font-size: var(--ui-font-caption); }
+.workspace-evidence-context p { margin: var(--space-1) 0; }
+.workspace-evidence-context small { color: var(--color-text-muted); font-size: var(--ui-font-caption); }

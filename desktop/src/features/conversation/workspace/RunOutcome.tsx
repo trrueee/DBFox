@@ -99,6 +99,6 @@ function outcomeTitle(
 ): string {
   const preserved = artifactCount > 0 ? "，已有结果仍可使用" : "";
   if (outcome === "failed") return `任务未完成${preserved}`;
-  if (outcome === "partial") return `分析部分完成${preserved}`;
+  if (outcome === "partial") return `任务部分完成${preserved}`;
   return `任务已停止${preserved}`;
 }

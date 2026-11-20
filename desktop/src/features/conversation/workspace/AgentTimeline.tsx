@@ -15,6 +15,7 @@ import type {
   ConversationRunItem,
   FunctionCallItem,
   FunctionCallOutputItem,
+  ConversationEvidence,
   UserMessageItem,
 } from "../../../types/conversation";
 import { AgentPlan } from "../../../components/agent-elements/AgentPlan";
@@ -30,7 +31,7 @@ import { ApprovalAuditCard } from "./ApprovalCard";
 import {
   isPrimaryConversationArtifact,
 } from "./conversationArtifactSelectors";
-import { DataReferencePanel } from "./DataReferencePanel";
+import { ArtifactSources } from "./ArtifactSources";
 import { RunOutcome } from "./RunOutcome";
 
 interface AgentTimelineProps {
@@ -40,6 +41,9 @@ interface AgentTimelineProps {
   ariaLabel?: string;
   onOpenSqlConsole?: (sql?: string) => void;
   onSelectArtifact?: (artifactId: string) => void;
+  onOpenEvidence?: (evidence: ConversationEvidence) => void;
+  pinnedActionId?: string;
+  onFocusAction?: () => void;
   resolvingQuestionId?: string | null;
   questionError?: unknown;
   onResolveQuestion?: (
@@ -66,6 +70,9 @@ export function AgentTimeline({
   ariaLabel = "Agent 时间线",
   onOpenSqlConsole,
   onSelectArtifact,
+  onOpenEvidence,
+  pinnedActionId,
+  onFocusAction,
   resolvingQuestionId,
   questionError,
   onResolveQuestion,
@@ -98,6 +105,8 @@ export function AgentTimeline({
   const preservedArtifacts = primaryArtifacts.filter(
     (artifact) => artifact.status === "completed",
   );
+  const savedArtifacts = preservedArtifacts.filter(artifact => !embeddedArtifactIds.has(artifact.id)
+    && !capabilityArtifacts.some(candidate => candidate.id === artifact.id));
   const evidenceArtifactIds = new Set(
     items
       .filter(
@@ -111,7 +120,7 @@ export function AgentTimeline({
   );
   const currentItem = activeItem(items);
   const renderableItems = useMemo(() => groupTimelineItems(items), [items]);
-  const workingStatus = runWorkingStatus(run.status, run.phase ?? null, items.length);
+  const workingStatus = runWorkingStatus(run.status, run.phase ?? null);
 
   return (
     <section className="conv-agent-timeline" aria-label={ariaLabel}>
@@ -138,6 +147,7 @@ export function AgentTimeline({
               item={item as AssistantMessageItem}
               artifacts={artifacts}
               onSelectArtifact={onSelectArtifact}
+              onOpenEvidence={onOpenEvidence}
             />
           );
         }
@@ -161,6 +171,13 @@ export function AgentTimeline({
               onSelectArtifact={onSelectArtifact}
             />
           );
+        }
+        if (item.id === pinnedActionId && onFocusAction) {
+          return <button key={item.id} type="button" className="conv-attention-link" onClick={onFocusAction}>
+            <span className="conv-attention-dot" aria-hidden="true" />
+            {item.type === "approval" ? "等待你的批准" : "需要你的答复"}
+            <CaretDownIcon size={14} aria-hidden="true" />
+          </button>;
         }
         if (item.type === "approval") {
           return (
@@ -193,16 +210,16 @@ export function AgentTimeline({
         onSelectArtifact={onSelectArtifact}
       />
       {["created", "queued", "running"].includes(run.status) && !currentItem && (
-        <Alert className="conv-run-alert" role="status" aria-live="polite">
+        <div className="conv-working-status" role="status">
           {run.status === "queued"
             ? <ClockIcon aria-hidden="true" />
             : <Spinner role="presentation" aria-hidden="true" aria-label={undefined} />}
-          <AlertTitle>{workingStatus.title}</AlertTitle>
-          <AlertDescription>{workingStatus.detail}</AlertDescription>
-        </Alert>
+          <span>{workingStatus}</span>
+          {run.status === "queued" ? <span className="conv-working-status__detail">当前任务结束后将自动开始</span> : null}
+        </div>
       )}
       {finalAnswer && evidenceArtifacts.length > 0 && (
-        <DataReferencePanel
+        <ArtifactSources
           artifacts={evidenceArtifacts}
           onSelectArtifact={onSelectArtifact}
         />
@@ -229,9 +246,9 @@ export function AgentTimeline({
           </div>
         </div>
       )}
-      {evidenceArtifacts.length === 0 && preservedArtifacts.length > 0 && (
-        <DataReferencePanel
-          artifacts={preservedArtifacts}
+      {evidenceArtifacts.length === 0 && savedArtifacts.length > 0 && (
+        <ArtifactSources
+          artifacts={savedArtifacts}
           kind="saved"
           onSelectArtifact={onSelectArtifact}
         />
@@ -262,31 +279,23 @@ function ArtifactResultCard({ artifact, onOpen, children }: { artifact: Conversa
 function runWorkingStatus(
   status: ConversationRun["status"],
   phase: ConversationRun["phase"],
-  itemCount: number,
-): { title: string; detail: string } {
-  if (status === "queued") {
-    return { title: "已排队", detail: "当前任务结束后将自动开始" };
-  }
-  if (status === "created") {
-    return { title: "正在准备任务", detail: "任务已接收，正在准备运行" };
-  }
+): string {
+  if (status === "queued") return "已排队";
+  if (status === "created") return "正在准备任务";
   switch (phase) {
     case "streaming_answer":
-      return { title: "正在生成回复", detail: "内容会在生成后持续显示" };
+      return "正在生成回复";
     case "preparing_tool_call":
-      return { title: "正在准备工具调用", detail: "模型正在生成结构化参数" };
+      return "正在准备操作";
     case "executing_tool":
-      return { title: "正在执行工具", detail: "正在等待能力返回可验证结果" };
+      return "正在执行操作";
     case "waiting_approval":
-      return { title: "等待确认", detail: "请处理上方的操作确认" };
+      return "等待你的确认";
     case "finalizing":
-      return { title: "正在整理结果", detail: "正在生成最终可交付回复" };
+      return "正在整理结果";
     case "waiting_model":
     default:
-      return {
-        title: itemCount === 1 ? "正在等待模型响应" : "正在准备下一步",
-        detail: "模型可能正在生成回答或准备结构化工具调用",
-      };
+      return "正在处理";
   }
 }
 
@@ -296,6 +305,7 @@ function UserMessage({ item }: { item: UserMessageItem }) {
     <Message from="user" className="conv-message">
       <MessageContent className="conv-message-body">
         <p>{item.payload.content}</p>
+        <InputReceipt delivery={item.payload.delivery} />
         <div className="conv-message-references">{(item.payload.references ?? []).map((ref, index) => {
           const reference = { label: ref.label, object: ref.object ?? undefined, authority: ref.authority ?? undefined, locator: ref.locator ?? undefined, artifactId: ref.artifact_id ?? undefined };
           return <ReferenceCard key={ref.object?.id ?? ref.artifact_id ?? index} name={ref.label} kind={referenceKind(reference)} onOpen={() => {
@@ -309,14 +319,25 @@ function UserMessage({ item }: { item: UserMessageItem }) {
   );
 }
 
+function InputReceipt({ delivery }: { delivery: UserMessageItem["payload"]["delivery"] }) {
+  if (!delivery) return null;
+  const label = delivery.mode === "steer"
+    ? delivery.status === "consumed" ? "已纳入后续处理" : delivery.status === "cancelled" ? "补充未被采用" : "补充已提交 · 等待采用"
+    : delivery.mode === "respond" ? "答复已接收"
+      : delivery.status === "admitted" ? "已接收 · 排队中" : null;
+  return label ? <span className="conv-input-receipt" role="status">{label}</span> : null;
+}
+
 function AssistantMessage({
   item,
   artifacts,
   onSelectArtifact,
+  onOpenEvidence,
 }: {
   item: AssistantMessageItem;
   artifacts: ConversationArtifact[];
   onSelectArtifact?: (artifactId: string) => void;
+  onOpenEvidence?: (evidence: ConversationEvidence) => void;
 }) {
   if (item.status === "cancelled" || !item.payload.content) return null;
   const renderArtifact = (artifactId: string) => {
@@ -347,15 +368,20 @@ function AssistantMessage({
     <Message
       from="assistant"
       className="conv-agent-message"
+      data-phase={item.payload.completion_disposition ? "final_answer" : item.payload.phase ?? "final_answer"}
       data-streaming-reveal={item.status === "in_progress" ? "true" : undefined}
-      aria-live={item.status === "in_progress" ? "polite" : undefined}
     >
       <MessageContent className="conv-answer-document">
         <MarkdownContent
           content={item.payload.content}
+          streaming={item.status === "in_progress"}
           citations={item.payload.evidence}
           artifactRefs={item.payload.artifact_refs}
           onCitation={onSelectArtifact}
+          onEvidence={onOpenEvidence ? evidenceId => {
+            const evidence = item.payload.evidence.find(candidate => candidate.id === evidenceId);
+            if (evidence) onOpenEvidence(evidence);
+          } : undefined}
           renderArtifact={renderArtifact}
           artifacts={artifacts}
         />
@@ -374,29 +400,23 @@ function groupTimelineItems(items: ConversationRunItem[]): RenderableTimelineIte
 
   const flushGroup = () => {
     if (currentGroup.length === 0) return;
-    if (currentGroup.length === 1) {
-      result.push({ kind: "single", item: currentGroup[0] });
-    } else {
-      const first = currentGroup[0];
-      result.push({
-        kind: "function_group",
-        id: `group-${first.id}-${currentGroup.length}`,
-        title: first.payload.presentation.title,
-        category: first.payload.presentation.category,
-        items: [...currentGroup],
-      });
-    }
+    const first = currentGroup[0];
+    result.push({
+      kind: "function_group",
+      id: `group-${first.id}`,
+      title: currentGroup.every(item => item.payload.presentation.title === first.payload.presentation.title)
+        ? first.payload.presentation.title : "工作记录",
+      category: first.payload.presentation.category,
+      items: [...currentGroup],
+    });
     currentGroup = [];
   };
 
   for (const item of items) {
     if (item.type === "function_call_output") continue;
     if (item.type === "function_call" && item.payload.presentation.visibility !== "developer") {
-      const last = currentGroup[currentGroup.length - 1];
-      if (!last || last.payload.presentation.title === item.payload.presentation.title) {
-        currentGroup.push(item);
-        continue;
-      }
+      currentGroup.push(item);
+      continue;
     }
     flushGroup();
     result.push({ kind: "single", item });

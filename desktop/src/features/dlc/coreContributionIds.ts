@@ -3,10 +3,12 @@ export const CORE_DOCK_VIEW_TYPES = Object.freeze({
   artifact: "core.artifact",
   projectWorkbench: "core.project-workbench",
   execution: "core.local-execution",
+  computer: "core.computer",
 } as const);
 
 export const CORE_ARTIFACT_VIEW_IDS = Object.freeze({
   markdown: "core.markdown",
   dataframeTable: "core.dataframe.table",
   executionLog: "core.local-execution.log",
+  computerCapture: "core.computer.capture",
 } as const);

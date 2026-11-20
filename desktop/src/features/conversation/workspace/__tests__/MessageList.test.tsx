@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AssistantMessageItem,
@@ -71,6 +71,46 @@ describe("MessageList", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+  it("leaves readers in place until they choose to return to the latest output", async () => {
+    const scrollTo = vi.fn();
+    const { container, rerender } = render(<MessageList runs={[run("run-1", 1)]} items={[user("run-1", 1), answer("run-1", 1)]} artifacts={[]} />);
+    const viewport = container.querySelector(".conv-message-scroll") as HTMLDivElement;
+    viewport.scrollTo = scrollTo;
+    Object.defineProperties(viewport, {
+      scrollHeight: { configurable: true, value: 1800 },
+      clientHeight: { configurable: true, value: 500 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+    fireEvent.scroll(viewport);
+    expect(screen.getByRole("button", { name: "回到最新" })).toBeTruthy();
+    rerender(<MessageList runs={[run("run-1", 1)]} items={[user("run-1", 1), { ...answer("run-1", 1), revision: 2, payload: { ...answer("run-1", 1).payload, content: "追加的真实输出" } }]} artifacts={[]} />);
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    expect(scrollTo).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "回到最新" }));
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1800, behavior: "auto" });
+    expect(screen.queryByRole("button", { name: "回到最新" })).toBeNull();
+  });
+
+  it("removes the jump control when a larger viewport already contains the latest output", () => {
+    const resize = new Set<() => void>();
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: ResizeObserverCallback) { resize.add(() => callback([], this as unknown as ResizeObserver)); }
+      observe() {} unobserve() {} disconnect() {}
+    });
+    const { container } = render(<MessageList runs={[run("run-1", 1)]} items={[answer("run-1", 1)]} artifacts={[]} />);
+    const viewport = container.querySelector(".conv-message-scroll") as HTMLDivElement;
+    Object.defineProperties(viewport, {
+      scrollHeight: { configurable: true, value: 1800 },
+      clientHeight: { configurable: true, value: 500 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+    fireEvent.scroll(viewport);
+    expect(screen.getByRole("button", { name: "回到最新" })).toBeTruthy();
+    Object.defineProperty(viewport, "scrollHeight", { configurable: true, value: 480 });
+    act(() => resize.forEach(callback => callback()));
+    expect(screen.queryByRole("button", { name: "回到最新" })).toBeNull();
   });
   it("projects each run's user input and answer without cross-run leakage", () => {
     const runs = [run("run-1", 1), run("run-2", 2)];
@@ -118,7 +158,7 @@ describe("MessageList", () => {
       />,
     );
     expect(screen.queryByText("已排队")).toBeNull();
-    expect(screen.getByText("正在等待模型响应")).toBeTruthy();
+    expect(screen.getByText("正在处理")).toBeTruthy();
   });
 
   it("shows the provider-neutral phase while structured tool arguments are prepared", () => {
@@ -133,8 +173,8 @@ describe("MessageList", () => {
         onOpenSqlConsole={vi.fn()}
       />,
     );
-    expect(screen.getByText("正在准备工具调用")).toBeTruthy();
-    expect(screen.getByText("模型正在生成结构化参数")).toBeTruthy();
+    expect(screen.getByText("正在准备操作")).toBeTruthy();
+    expect(screen.queryByText("模型正在生成结构化参数")).toBeNull();
   });
 
   it("exposes bounded history loading, pending, exhausted, and retry states", async () => {

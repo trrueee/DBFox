@@ -61,7 +61,10 @@ export function useConversationViewModel(conversationId: string) {
     ),
   });
   const cancelMutation = useMutation({
-    mutationFn: cancelRunAction,
+    mutationFn: ({ runId }: { runId: string; conversationId: string }) => cancelRunAction(runId),
+    onError: async (_error, target) => {
+      await openConversationAction(target.conversationId).catch(() => undefined);
+    },
   });
   const approvalMutation = useMutation({
     mutationFn: ({
@@ -163,8 +166,10 @@ export function useConversationViewModel(conversationId: string) {
     },
     sending: sendMutation.isPending,
     sendError: sendMutation.error ?? null,
-    cancelRun: (runId: string) => cancelMutation.mutateAsync(runId),
-    cancelling: cancelMutation.isPending,
+    cancelRun: (runId: string) => cancelMutation.mutateAsync({ runId, conversationId }),
+    cancelling: cancelMutation.isPending && cancelMutation.variables?.runId === runningRun?.id,
+    cancelError: cancelMutation.variables?.runId === runningRun?.id && runningRun?.status !== "cancelling"
+      ? cancelMutation.error : null,
     resolveApproval: (runId: string, approvalId: string, approved: boolean) =>
       approvalMutation.mutateAsync({ runId, approvalId, approved }),
     resolvingApprovalId: approvalMutation.isPending

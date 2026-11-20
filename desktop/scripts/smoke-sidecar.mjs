@@ -308,6 +308,7 @@ function buildPackagedDlcFixture(outputDir) {
     outputDir,
   ], {
     cwd: repositoryRoot,
+    env: { ...process.env, DBFOX_RUNTIME_DIR: runtimeDir },
     encoding: "utf8",
     windowsHide: true,
   });
@@ -338,6 +339,7 @@ function buildPackagedGithubDlcFixture(outputDir) {
     outputDir,
   ], {
     cwd: repositoryRoot,
+    env: { ...process.env, DBFOX_RUNTIME_DIR: runtimeDir },
     encoding: "utf8",
     windowsHide: true,
   });

@@ -5,7 +5,7 @@ import { Button, EmptyState, LoadingState } from "../../components/ui";
 import { getUserErrorMessage } from "../../lib/api/client";
 import { localExecutionApi } from "../../lib/api/localExecution";
 import { openExecutionDock } from "../../stores/executionDock";
-import { ExecutionLogView, isActiveJob, jobStatus, jobTitle } from "./ExecutionLogView";
+import { ExecutionLogView, jobStatus, jobTitle } from "./ExecutionLogView";
 
 export function ExecutionJobsDock({ conversationId, jobId }: { conversationId: string; jobId?: string }) {
   return jobId ? <LiveJob key={jobId} conversationId={conversationId} jobId={jobId} />
@@ -24,7 +24,9 @@ function JobList({ conversationId }: { conversationId: string }) {
   const jobs = useQuery({
     queryKey: ["execution-jobs", conversationId],
     queryFn: ({ signal }) => localExecutionApi.list(conversationId, signal),
-    refetchInterval: query => query.state.data?.some(isActiveJob) ? 1200 : false,
+    // New Jobs may start after the last one finishes or while this list is empty.
+    // Keep the mounted projection current; TanStack pauses polling in the background.
+    refetchInterval: 1200,
     gcTime: 0,
     retry: false,
   });

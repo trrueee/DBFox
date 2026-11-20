@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationArtifact } from "../../../../types/conversation";
-import { DataReferencePanel } from "../DataReferencePanel";
+import { ArtifactSources } from "../ArtifactSources";
 
 function artifacts(): ConversationArtifact[] {
   return [
@@ -49,15 +49,15 @@ function artifacts(): ConversationArtifact[] {
   ];
 }
 
-describe("DataReferencePanel", () => {
+describe("ArtifactSources", () => {
   beforeEach(() => {
     cleanup();
   });
 
   it("uses a CSP-safe native disclosure for derived data references", () => {
-    const { container } = render(<DataReferencePanel artifacts={artifacts()} />);
+    const { container } = render(<ArtifactSources artifacts={artifacts()} />);
 
-    expect(screen.getByText("引用的数据来源")).toBeTruthy();
+    expect(screen.getByText("引用来源")).toBeTruthy();
     const disclosure = container.querySelector("details");
     const trigger = container.querySelector("summary");
     expect(disclosure).toBeTruthy();
@@ -74,16 +74,16 @@ describe("DataReferencePanel", () => {
   });
 
   it("labels uncited artifacts as saved results rather than evidence", () => {
-    render(<DataReferencePanel artifacts={artifacts()} kind="saved" />);
+    render(<ArtifactSources artifacts={artifacts()} kind="saved" />);
 
     expect(screen.getByText("已保存结果")).toBeTruthy();
-    expect(screen.queryByText("引用的数据来源")).toBeNull();
+    expect(screen.queryByText("引用来源")).toBeNull();
   });
 
   it("selects artifact references for the dock when a selector is provided", () => {
     const onSelectArtifact = vi.fn();
     const { container } = render(
-      <DataReferencePanel
+      <ArtifactSources
         artifacts={artifacts()}
         onSelectArtifact={onSelectArtifact}
       />,

@@ -1,6 +1,5 @@
 appId: com.dbfox.app
 productName: DBFox
-electronVersion: 43.4.1
 asar: true
 compression: normal
 npmRebuild: false

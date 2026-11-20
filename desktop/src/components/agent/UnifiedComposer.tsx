@@ -6,6 +6,7 @@ import {
   CaretDownIcon,
   CircleNotchIcon,
   PlusIcon,
+  StopCircleIcon,
 } from "@/components/icons";
 import { ReferenceCard } from "../resources/ReferenceCard";
 import { referenceKind } from "../resources/resourcePresentation";
@@ -54,6 +55,7 @@ interface UnifiedComposerProps {
   running?: boolean;
   submitting?: boolean;
   cancelling?: boolean;
+  cancelError?: unknown;
   disabled?: string | null;
   error?: unknown;
   deliveryMode?: ConversationDeliveryMode;
@@ -80,6 +82,7 @@ export function UnifiedComposer({
   running = false,
   submitting = false,
   cancelling = false,
+  cancelError,
   disabled,
   error,
   deliveryMode = "queue",
@@ -94,30 +97,34 @@ export function UnifiedComposer({
   ))));
   const unavailable = Boolean(disabled) || submitting || attachmentBusy;
   const hasInput = value.trim().length > 0;
-  const errorMessage = typeof error === "string"
+  const visibleError = cancelError ?? error;
+  const errorMessage = cancelError ? "停止请求未确认，任务可能仍在运行。" : typeof error === "string"
     ? error
     : error
       ? getUserErrorMessage(error, "消息发送失败，请重试。")
       : null;
-  const showStop = running && !hasInput && Boolean(onCancel);
-  const actionStatus: PromptInputStatus | undefined = cancelling || submitting
+  const showStop = running && Boolean(onCancel);
+  const actionStatus: PromptInputStatus | undefined = submitting
     ? "submitted"
-    : showStop
-      ? "streaming"
-      : error
-        ? "error"
-        : undefined;
+    : undefined;
+
+  const cancel = async () => {
+    if (cancelling) return;
+    try { await onCancel?.(); }
+    catch { /* The caller exposes the request error; keep the draft and Run projection. */ }
+  };
 
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
-    if (!hasInput || unavailable) return;
+    if (!hasInput || unavailable || cancelling) return;
     void onSubmit();
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "Escape" && running && onCancel && !cancelling) {
       event.preventDefault();
-      void onCancel();
+      void cancel();
       return;
     }
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -148,7 +155,7 @@ export function UnifiedComposer({
           onKeyDown={handleKeyDown}
           placeholder={disabled || placeholder}
           aria-label={ariaLabel}
-          disabled={Boolean(disabled) || submitting}
+          disabled={Boolean(disabled)}
           autoFocus={autoFocus}
         />
 
@@ -189,14 +196,22 @@ export function UnifiedComposer({
             </DropdownMenu>
           ) : null}
 
-          <PromptInputAction tooltip={showStop ? "停止当前任务（Esc）" : "发送（Enter）"}>
+          {showStop ? <PromptInputAction tooltip={cancelling ? "正在停止，等待执行确认" : "停止当前任务（Esc）"}>
+            <Button type="button" variant="ghost" size="icon"
+              className="dbfox-composer__stop-action"
+              aria-label={cancelling ? "正在停止当前任务" : "停止当前任务"}
+              aria-busy={cancelling || undefined} disabled={cancelling}
+              onClick={() => void cancel()}>
+              {cancelling ? <CircleNotchIcon className="dbfox-composer__loading" size={22} aria-hidden="true" /> : <StopCircleIcon size={22} aria-hidden="true" />}
+            </Button>
+          </PromptInputAction> : null}
+          <PromptInputAction tooltip="发送（Enter）">
             <PromptInputSubmit
               status={actionStatus}
-              onStop={showStop ? () => void onCancel?.() : undefined}
               className="dbfox-composer__primary-action"
-              disabled={showStop ? cancelling : !hasInput || unavailable}
-              aria-label={showStop ? "停止当前任务" : submitting ? "正在发送" : `发送：${running ? DELIVERY_LABELS[deliveryMode] : "立即执行"}`}
-              aria-busy={submitting || cancelling || undefined}
+              disabled={!hasInput || unavailable || cancelling}
+              aria-label={submitting ? "正在发送" : `发送：${running ? DELIVERY_LABELS[deliveryMode] : "立即执行"}`}
+              aria-busy={submitting || undefined}
             />
           </PromptInputAction>
         </PromptInputActions>
@@ -204,12 +219,12 @@ export function UnifiedComposer({
         {attachmentError ? <Alert className="dbfox-composer__error" variant="destructive">
           <AlertDescription>{attachmentError}{onRetryAttachment ? <Button type="button" variant="ghost" size="sm" onClick={onRetryAttachment}>重试添加文件</Button> : null}</AlertDescription>
         </Alert> : null}
-        {error ? (
+        {visibleError ? (
           <Alert className="dbfox-composer__error" variant="destructive">
             <WarningCircleIcon aria-hidden="true" />
             <AlertDescription>
               <p>{errorMessage}</p>
-              <ErrorDetails error={error} />
+              <ErrorDetails error={visibleError} />
             </AlertDescription>
           </Alert>
         ) : null}

@@ -4,6 +4,12 @@ import { join } from "node:path";
 const root = process.cwd();
 const stagingRoot = join(root, "electron-app");
 const sourcePackage = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+const lock = JSON.parse(await readFile(join(root, "package-lock.json"), "utf8"));
+const electronVersion = lock.packages["node_modules/electron"]?.version;
+const installedElectron = JSON.parse(await readFile(join(root, "node_modules/electron/package.json"), "utf8"));
+if (!electronVersion || installedElectron.version !== electronVersion) {
+  throw new Error("The installed Electron must match package-lock.json. Run npm ci before packaging.");
+}
 
 await rm(stagingRoot, { recursive: true, force: true });
 await mkdir(stagingRoot, { recursive: true });
@@ -32,6 +38,9 @@ const stagedPackage = {
   private: true,
   type: "module",
   main: "dist-electron/main/index.js",
+  // electron-builder consumes an exact build dependency from the committed
+  // lock. Dev dependencies are not bundled in the dependency-free runtime.
+  devDependencies: { electron: electronVersion },
 };
 await writeFile(
   join(stagingRoot, "package.json"),

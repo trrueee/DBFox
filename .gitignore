@@ -47,6 +47,8 @@ desktop/dist/
 desktop/dist-tests/
 desktop/dist-electron/
 desktop/.electron-host-smoke-*/
+desktop/.electron-packaged-smoke-*/
+desktop/.dbfox-sidecar-smoke-*/
 desktop/electron-app/
 desktop/electron-resources/
 desktop/release-electron/

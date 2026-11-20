@@ -3,6 +3,7 @@ import {
   FileTextIcon,
   SparkleIcon,
   TerminalWindowIcon,
+  MonitorIcon,
 } from "@/components/icons";
 import { LoadingState } from "../../components/ui";
 import { useConversationStore } from "../../stores/conversationStore";
@@ -23,6 +24,7 @@ const ArtifactsDockContent = lazy(() =>
 const ExecutionJobsDock = lazy(() =>
   import("./ExecutionJobsDock").then((module) => ({ default: module.ExecutionJobsDock })),
 );
+const ComputerDock = lazy(() => import("../computer/ComputerDock").then(module => ({ default: module.ComputerDock })));
 
 function ArtifactTabIcon({ view }: { view: WorkspaceDockTab }) {
   const artifactId = view.target?.type === "artifact" ? view.target.id : undefined;
@@ -32,6 +34,14 @@ function ArtifactTabIcon({ view }: { view: WorkspaceDockTab }) {
 }
 
 export const coreDockViews: readonly DockViewContribution[] = [
+  {
+    viewType: CORE_DOCK_VIEW_TYPES.computer,
+    preferredWidth: 500,
+    icon: () => <MonitorIcon {...iconProps} />,
+    resolveTitle: () => "电脑",
+    isVisible: (view, context) => Boolean(view.sessionId) && (view.sessionId === context.activeConversationId || view.stateKey === context.workbenchScopeId),
+    render: view => <Suspense fallback={<LoadingState label="正在载入电脑工作台" />}><ComputerDock key={view.sessionId} conversationId={view.sessionId ?? ""} /></Suspense>,
+  },
   {
     viewType: CORE_DOCK_VIEW_TYPES.execution,
     preferredWidth: 430,

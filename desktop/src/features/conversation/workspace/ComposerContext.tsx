@@ -8,6 +8,7 @@ import {
   PlusIcon,
   ArrowsClockwiseIcon,
   GearIcon,
+  MonitorIcon,
 } from "@/components/icons";
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../../../components/ui";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
@@ -18,7 +19,7 @@ import { listLlmModels } from "../../../lib/api/agent";
 import { localModelQuery } from "../../../lib/api/localModel";
 import { getUserErrorMessage } from "../../../lib/api/client";
 
-export function ComposerContext({ busy = false }: { busy?: boolean }) {
+export function ComposerContext({ busy = false, onOpenComputer }: { busy?: boolean; onOpenComputer?: () => void | Promise<void> }) {
   const projectId = useWorkspaceStore(state => state.activeProjectId);
   const setActiveProject = useWorkspaceStore(state => state.setActiveProject);
   const openSettings = useWorkspaceStore(state => state.openSettings);
@@ -27,6 +28,8 @@ export function ComposerContext({ busy = false }: { busy?: boolean }) {
   const config = useSavedApiConfig();
   const modelStatus = useQuery(localModelQuery);
   const [modelOpen, setModelOpen] = useState(false);
+  const [openingComputer, setOpeningComputer] = useState(false);
+  const [computerError, setComputerError] = useState<string>();
   const models = useQuery({
     queryKey: ["llm-models", config.apiBase, config.credentialId],
     enabled: modelStatus.data?.mode === "remote" && modelOpen && Boolean(config.credentialId),
@@ -41,6 +44,13 @@ export function ComposerContext({ busy = false }: { busy?: boolean }) {
   const options = [...new Set([config.modelName, ...(models.data ?? [])].filter(Boolean))];
 
   return <>
+    {onOpenComputer && <Button type="button" variant="ghost" size="sm" className="dbfox-composer__context"
+      disabled={busy || openingComputer} title="选择浏览器或共享窗口" onClick={async event => {
+        event.stopPropagation(); setComputerError(undefined); setOpeningComputer(true);
+        try { await onOpenComputer(); } catch (error) { setComputerError(getUserErrorMessage(error, "电脑工作台暂不可用。")); }
+        finally { setOpeningComputer(false); }
+      }}><MonitorIcon size={16} aria-hidden="true" /><span>{openingComputer ? "正在打开…" : "电脑"}</span></Button>}
+    {computerError && <span role="alert">{computerError}</span>}
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="dbfox-composer__context dbfox-composer__project"

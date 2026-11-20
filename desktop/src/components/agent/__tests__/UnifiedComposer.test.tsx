@@ -78,11 +78,11 @@ describe("UnifiedComposer", () => {
     expect(container.querySelector(".dbfox-composer__context")).toBeNull();
   });
 
-  it("uses one primary action slot for send and stop", () => {
+  it("keeps Stop independent from Send while drafting a follow-up", () => {
     const { getByRole, onCancel, queryByRole, rerender } = renderComposer("", { running: true });
     const stop = getByRole("button", { name: "停止当前任务" });
 
-    expect(queryByRole("button", { name: /发送：/ })).toBeNull();
+    expect(getByRole("button", { name: /发送：/ }).hasAttribute("disabled")).toBe(true);
     fireEvent.click(stop);
     expect(onCancel).toHaveBeenCalledTimes(1);
 
@@ -99,13 +99,43 @@ describe("UnifiedComposer", () => {
     );
 
     const send = getByRole("button", { name: "发送：排队执行" });
-    expect(stop.isSameNode(send)).toBe(true);
-    expect(queryByRole("button", { name: "停止当前任务" })).toBeNull();
+    expect(stop.isSameNode(getByRole("button", { name: "停止当前任务" }))).toBe(true);
+    expect(send.hasAttribute("disabled")).toBe(false);
+    expect(queryByRole("button", { name: "停止当前任务" })).not.toBeNull();
+  });
+
+  it("waits for cancellation confirmation and preserves an editable draft", () => {
+    const { getByRole, onCancel, onSubmit } = renderComposer("follow up", { running: true, cancelling: true });
+    expect(getByRole("button", { name: "正在停止当前任务" }).hasAttribute("disabled")).toBe(true);
+    expect(getByRole("textbox").hasAttribute("disabled")).toBe(false);
+    fireEvent.keyDown(getByRole("textbox"), { key: "Escape" });
+    fireEvent.keyDown(getByRole("textbox"), { key: "Enter" });
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("allows a new draft during admission and ignores Escape from an IME", () => {
+    const { getByRole, onChange, onCancel } = renderComposer("draft", { running: true, submitting: true });
+    fireEvent.change(getByRole("textbox"), { target: { value: "next draft" } });
+    expect(onChange).toHaveBeenCalledWith("next draft");
+    fireEvent.keyDown(getByRole("textbox"), { key: "Escape", isComposing: true });
+    expect(onCancel).not.toHaveBeenCalled();
   });
 
   it("supports Escape as keyboard parity for the active stop action", () => {
     const { getByRole, onCancel } = renderComposer("draft", { running: true });
     fireEvent.keyDown(getByRole("textbox", { name: "Composer" }), { key: "Escape" });
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a failed stop request distinct from a confirmed stop", async () => {
+    const onCancel = vi.fn().mockRejectedValue(new Error("connection lost"));
+    const { getByRole, getByText } = renderComposer("保留草稿", { running: true, onCancel, cancelError: new Error("connection lost") });
+    fireEvent.click(getByRole("button", { name: "停止当前任务" }));
+    await Promise.resolve();
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(getByText("停止请求未确认，任务可能仍在运行。")).toBeTruthy();
+    expect((getByRole("textbox") as HTMLTextAreaElement).value).toBe("保留草稿");
+    expect(getByRole("button", { name: /发送：/ }).querySelector("use")?.getAttribute("href")).toContain("#arrow-up-regular");
   });
 });
