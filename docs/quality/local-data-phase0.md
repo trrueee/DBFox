@@ -620,7 +620,7 @@ WorkspaceService；参考官方 Pydantic、VS Code、Codex patch 及 Anthropic �
 | 边界 | 落地职责 |
 | --- | --- |
 | ToolDispatcher | 拒绝未知名称时展示本 Turn 至多 24 个准确函数名；空集合明确说明，隐藏或未物化函数不出现。提示不执行别名，也不自动重发调用。 |
-| PolicyGate | 保留声明 schema 的字段词汇、有界索引及标准错误类型；未知键、自定义类型、参数值与错误 ctx 不进入公开诊断。最多八条，文本有界。 |
+| PolicyGate | 保留声明 schema 的字段、判别联合的声明标签、有界索引及标准错误类型；未知键、自定义类型、参数值与错误 ctx 不进入公开诊断。最多八条，文本有界。 |
 | Workspace DLC | `file_edit@3` 对统一 LF/CRLF 文档使用文档换行约定；读和 raw hash 不变，周围字节保持。混合或仅 CR 文档保留字面编辑。 |
 | Workspace 编辑保护 | 两次 find 检查全部起始位置，默认拒绝重叠歧义；显式 replace_all 按标准非重叠替换。统一后相同的文本拒绝作为修改。 |
 

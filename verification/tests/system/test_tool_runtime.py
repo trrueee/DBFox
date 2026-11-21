@@ -321,6 +321,7 @@ def test_product_registry_contains_only_kernel_tools_without_system_dlcs():
         "conversation_search",
         "project_resource_search",
         "request_clarification",
+        "submit_answer",
         "update_plan",
     }
 

@@ -168,6 +168,32 @@ def test_input_diagnostics_keep_declared_nested_locations_but_not_dynamic_keys(d
     assert "PRIVATE_BODY" not in decision.reason
 
 
+def test_input_diagnostics_preserve_schema_declared_discriminator_labels(db_session):
+    from typing import Annotated, Literal
+    from pydantic import Field
+
+    class Append(ToolInputModel):
+        operation: Literal["append"]
+        amount: int
+
+    class Remove(ToolInputModel):
+        operation: Literal["remove"]
+        position: int
+
+    class ChangeInput(ToolInputModel):
+        changes: list[Annotated[Append | Remove, Field(discriminator="operation")]]
+
+    class ChangeTool(PolicyTestTool):
+        input_model = ChangeInput
+
+    decision = PolicyGate(ToolRegistry().register(ChangeTool()), db_session).check(
+        _state(), "policy_test", {"changes": [{"operation": "append", "amount": "PRIVATE_VALUE"}]},
+    )
+    assert decision.status == "blocked"
+    assert "changes.0.append.amount (int_parsing)" in decision.reason
+    assert "PRIVATE_VALUE" not in decision.reason
+
+
 def test_custom_validator_context_and_error_types_are_not_public_diagnostics(db_session):
     from pydantic import field_validator
     from pydantic_core import PydanticCustomError

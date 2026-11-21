@@ -10,6 +10,7 @@ PARENT_TOOL_NAMES = (
     "conversation_search",
     "project_resource_search",
     "request_clarification",
+    "submit_answer",
     "update_plan",
 )
 

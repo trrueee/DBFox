@@ -96,17 +96,23 @@ def test_strict_types_null_defaults_and_host_normalization(store):
 
 
 def test_stamp_area_mismatch_gives_a_specific_safe_tool_contract_error(store, db_session):
+    from pydantic import ValidationError
+
     registry = ToolRegistry().register(t.PixelWriteTool(store))
-    decision = PolicyGate(registry, db_session).check({}, "pixel_apply", {
+    invalid = {
         "document_id": "pixel_fixture", "expected_version": 4,
         "operations": [{
             "kind": "stamp", "frame_id": "frame_1", "layer_id": "layer_1",
             "rect": {"x": 0, "y": 0, "width": 16, "height": 16}, "pixels": [0] * 258,
         }],
-    })
+    }
+    with pytest.raises(ValidationError) as error:
+        c.ApplyInput.model_validate(invalid)
+    assert error.value.errors(include_input=False)[0]["type"] == "pixel_stamp_pixel_count_must_equal_rectangle_area"
+    decision = PolicyGate(registry, db_session).check({}, "pixel_apply", invalid)
     assert decision.status == "blocked"
     assert decision.error_code == "TOOL_INPUT_INVALID"
-    assert "operations.0.stamp (pixel_stamp_pixel_count_must_equal_rectangle_area)" in decision.reason
+    assert "operations.0.stamp (invalid)" in decision.reason
     assert "pixel_fixture" not in decision.reason
     valid = c.ApplyInput.model_validate({
         "document_id": "pixel_fixture", "expected_version": 4,

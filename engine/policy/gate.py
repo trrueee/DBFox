@@ -36,14 +36,17 @@ def _safe_input_contract_reason(
 
     # Error locations can contain extra-property and mapping keys from the input.
     # Only vocabulary from the declared schema is safe to include in a diagnostic.
-    declared_fields: set[str] = set()
+    declared_locations: set[str] = set()
     pending: list[Any] = [input_schema]
     while pending:
         node = pending.pop()
         if isinstance(node, dict):
             properties = node.get("properties")
             if isinstance(properties, dict):
-                declared_fields.update(properties)
+                declared_locations.update(properties)
+            discriminator = node.get("discriminator")
+            if isinstance(discriminator, dict) and isinstance(discriminator.get("mapping"), dict):
+                declared_locations.update(discriminator["mapping"])
             pending.extend(value for value in node.values() if isinstance(value, (dict, list)))
         elif isinstance(node, list):
             pending.extend(node)
@@ -52,7 +55,7 @@ def _safe_input_contract_reason(
     for item in error.errors(include_url=False, include_input=False, include_context=False)[:8]:
         location = ".".join(
             str(part)[:64] if (
-                isinstance(part, str) and part in declared_fields
+                isinstance(part, str) and part in declared_locations
                 or isinstance(part, int) and 0 <= part <= 1_000_000
             ) else "<key>"
             for part in item.get("loc", ())[:8]

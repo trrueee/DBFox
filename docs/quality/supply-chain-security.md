@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-11-21
+> 最后核验：2026-11-22
 >
 > 适用范围：Python、npm 锁文件与持续集成安全审计
 
@@ -32,6 +32,19 @@
 
 这层契约不替代在线漏洞数据库，但能阻止无锁、无 hash、Git/本地依赖或未校验下载在
 审计之前悄悄进入构建。
+
+## 跨平台检出的字节一致性
+
+固定 hash 的图标源文件、生成的 SVG 和 DLC vendor 资源必须保留上游或构建器的原始字节。
+根目录 `.gitattributes` 对这些路径使用 Git 官方的 `-text` 属性，避免 Windows 的
+`core.autocrlf` 改写换行；两个逐字节校验的 TypeScript 生成文件使用 `text eol=lf`。
+普通源码保持既有检出策略，不通过放宽 hash 或生成器检查来接受被改写的资源。
+
+`desktop/scripts/__tests__/checkout-bytes.test.mjs` 使用真实的临时 Git 仓库，分别在
+`core.autocrlf=true/false` 下检查索引与检出过滤后的字节，并用普通文本确认换行转换确实
+启用。缺少属性时 Windows 模式可复现失败；增加属性后本地 Electron 合集 42 项通过，
+`npm run check:icons` 通过。干净 Windows checkout 的发布检查仍须在 CI 复验。
+属性语义见 [Git 官方文档](https://git-scm.com/docs/gitattributes)。
 
 ## 本地复核
 
