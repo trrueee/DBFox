@@ -6,7 +6,7 @@ from contextlib import contextmanager
 import time
 from uuid import uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session
 
 from engine.agent.repositories.write_transaction import begin_agent_write
@@ -48,9 +48,18 @@ class ComputerGrantStore:
             return self._list(db, session_id)
 
     def _list(self, db: Session, session_id: str) -> tuple[ComputerGrant, ...]:
+        live = and_(
+            ComputerGrantRecord.engine_generation == self.generation,
+            ComputerGrantRecord.status.in_(("active", "paused")),
+            ComputerGrantRecord.expires_at > self.clock(),
+        )
+        history = select(ComputerGrantRecord.id).where(
+            ComputerGrantRecord.session_id == session_id, ~live,
+        ).order_by(ComputerGrantRecord.created_at.desc(), ComputerGrantRecord.id.desc()).limit(16)
         rows = db.scalars(select(ComputerGrantRecord).where(
             ComputerGrantRecord.session_id == session_id,
-        ).order_by(ComputerGrantRecord.created_at.desc()).limit(16))
+            or_(live, ComputerGrantRecord.id.in_(history)),
+        ).order_by(ComputerGrantRecord.created_at.desc(), ComputerGrantRecord.id.desc()))
         return tuple(self._view(row) for row in rows)
 
     def create(self, session_id: str, target: TargetIdentity, *, permission: str,

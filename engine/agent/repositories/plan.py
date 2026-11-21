@@ -36,6 +36,12 @@ class PlanRepository:
         self.session = session
         self.sessions = SessionRepository(session)
 
+    def current(self, run_id: str) -> TaskPlan | None:
+        row = self.session.execute(
+            select(AgentTaskPlanRecord).where(AgentTaskPlanRecord.run_id == run_id)
+        ).scalar_one_or_none()
+        return self._domain(row) if row is not None else None
+
     def update(
         self,
         *,
@@ -137,6 +143,8 @@ class PlanRepository:
         ).scalar_one_or_none()
         if row is None:
             return None
+        if status is PlanStatus.COMPLETED and not self._domain(row).is_settled:
+            raise PlanTransitionError("The Task Plan has unfinished steps; Run completion cannot skip them.")
         current_status = PlanStatus(str(row.status))
         if current_status in {
             PlanStatus.COMPLETED,
@@ -223,6 +231,8 @@ class PlanRepository:
     def _terminal_step(step: PlanStep, status: PlanStatus) -> PlanStep:
         if step.status not in {PlanStepStatus.PENDING, PlanStepStatus.IN_PROGRESS}:
             return step
+        if status is PlanStatus.COMPLETED:
+            raise PlanTransitionError("Run completion cannot skip unfinished plan steps.")
         if status is PlanStatus.FAILED and step.status is PlanStepStatus.IN_PROGRESS:
             return step.model_copy(
                 update={
@@ -235,7 +245,6 @@ class PlanRepository:
                 "status": PlanStepStatus.SKIPPED,
                 "note": step.note
                 or {
-                    PlanStatus.COMPLETED: "运行已完成，此步骤不再需要。",
                     PlanStatus.PARTIAL: "运行以部分结果结束，此步骤未继续执行。",
                     PlanStatus.CANCELLED: "运行已取消，此步骤未继续执行。",
                     PlanStatus.FAILED: "运行失败，此步骤未执行。",

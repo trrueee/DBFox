@@ -1,0 +1,9 @@
+# Pinned artwork and vendored/generated runtime assets are verified by raw hash.
+# Preserve their exact upstream/build bytes on every platform.
+/desktop/assets/** -text
+/desktop/public/assets/ui-icons/** -text
+/dlcs/**/frontend/vendor/** -text
+
+# These generators emit canonical LF and verify their source output verbatim.
+/desktop/src/components/icons/index.ts text eol=lf
+/desktop/src/components/brand/providerPaths.ts text eol=lf

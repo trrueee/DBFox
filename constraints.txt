@@ -1,4 +1,4 @@
-# Security floor for Paramiko's transitive dependency.
+# Security floor for DLC package signing and verification.
 # GHSA-g6cj-pr64-35w5 is fixed in cryptography 50.0.0.
 cryptography>=50.0.0,<51.0.0
 # Security floors shared by runtime, development, and frozen build locks.

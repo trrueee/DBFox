@@ -6,7 +6,8 @@ from engine.agent.completion import (
     SemanticArtifactCompletionSupport,
     SemanticCitationConstraint,
 )
-from engine.agent.context import ContextObservation, ContextSnapshot
+from engine.agent.context import ContextObservation, ContextSnapshot, ResponseItemBatch
+from engine.agent.context_budget import ContextBudgetExceeded, estimate_input_items_tokens
 from engine.agent.definition import DEFAULT_AGENT_DEFINITION
 from engine.agent.prompt import PromptAssembler
 from engine.agent.turn import ModelTurnResult, TurnAssistantMessage, TurnTermination
@@ -70,7 +71,7 @@ def test_prompt_keeps_user_context_out_of_system_role():
         definition=DEFAULT_AGENT_DEFINITION,
         context=_context(),
     ).hash
-    assert bundle.version == "4.3"
+    assert bundle.version == "5.2"
     assert "requested outcome, explicit constraints" in bundle.system_prompt
     assert "denominator" not in bundle.system_prompt
     assert "authorized Resource" in bundle.system_prompt
@@ -100,6 +101,42 @@ def test_prompt_isolates_the_only_active_request_from_prior_history():
     assert 'scope="only_active_request"' in messages[-1]["content"]
     assert "分析当前工作项" in messages[-1]["content"]
     assert "Earlier user messages are conversation history" in messages[-1]["content"]
+
+
+def test_completion_feedback_follows_the_rejected_answer_and_precedes_user_steering():
+    answer = {"type": "message", "role": "assistant", "status": "completed",
+              "content": [{"type": "output_text", "text": "There are 12 rows."}]}
+    focus = {"kind": "continue", "missing": ["inline_evidence"],
+             "reason": "Rewrite with {{cite:artifact_result}}."}
+    context = _context().model_copy(update={
+        "current_request": "Count the rows.", "run_focus": focus,
+        "response_batches": [ResponseItemBatch(turn_id="previous", items=[answer])],
+        "consumed_steers": ["Keep the answer brief."],
+    })
+    bundle = PromptAssembler().assemble(definition=DEFAULT_AGENT_DEFINITION, context=context)
+    assert bundle.messages[-3] == answer
+    feedback = bundle.messages[-2]
+    assert feedback["role"] == "user"
+    assert '<dbfox_runtime_feedback scope="active_run">' in feedback["content"]
+    assert "{{cite:artifact_result}}" in feedback["content"]
+    assert "whole replacement answer" in feedback["content"]
+    assert "Keep the answer brief." in bundle.messages[-1]["content"]
+    assert sum("Rewrite with" in str(item) for item in bundle.messages) == 1
+    assert "{{cite:artifact_result}}" not in bundle.system_prompt
+    assert bundle.budget["run_focus_tokens"] == estimate_input_items_tokens([feedback])
+    assert bundle.budget["estimated_prompt_tokens"] == estimate_input_items_tokens(bundle.messages)
+    assert context.response_batches[0].items == [answer]
+    assert context.run_focus == focus
+
+
+def test_completion_feedback_is_required_instead_of_silently_dropped(monkeypatch):
+    monkeypatch.setattr("engine.agent.prompt.build_system_prompt", lambda: "Trusted runtime policy.")
+    definition = DEFAULT_AGENT_DEFINITION.model_copy(update={
+        "limits": DEFAULT_AGENT_DEFINITION.limits.model_copy(update={"max_prompt_tokens": 1024}),
+    })
+    context = _context().model_copy(update={"run_focus": {"reason": "x" * 6000}})
+    with pytest.raises(ContextBudgetExceeded):
+        PromptAssembler().assemble(definition=definition, context=context)
 
 
 def test_prompt_budget_reserves_space_for_tool_schemas():
@@ -214,6 +251,45 @@ def test_evidence_artifact_can_synthesize_with_observed_inline_evidence():
         model_result=_final("订单呈上升趋势。{{cite:artifact_result}}"),
         turn_count=3,
         max_turns=8,
+    )
+    assert decision.kind is CompletionKind.SYNTHESIZE
+
+
+@pytest.mark.parametrize("answer", [
+    "{{cite:artifact_result}}",
+    " \n{{cite:artifact_result}}\n {{cite:artifact_result}} ",
+    "[{{cite:artifact_result}}]",
+    "**{{cite:artifact_result}}**。",
+])
+@pytest.mark.parametrize("at_budget", [False, True])
+def test_citations_alone_cannot_complete_or_become_a_bounded_partial(answer, at_budget):
+    context = _context(observations=[ContextObservation(
+        id="obs-result", tool_name="verification_read", status="succeeded",
+        summary="Returned 12 rows.", artifact_ids=["artifact_result"],
+        capabilities=(EVIDENCE_CAPABILITY,),
+    )])
+    decision = _policy().evaluate(
+        context=context, model_result=_final(answer),
+        turn_count=8 if at_budget else 3, max_turns=8,
+    )
+    assert decision.kind is (CompletionKind.FAIL if at_budget else CompletionKind.REPAIR)
+    assert decision.missing == ["answer"]
+    assert "complete answer" in decision.reason
+    assert _policy().evaluate_bounded_partial(
+        context=context, model_result=_final(answer), reason="Stopped without progress.",
+    ).kind is CompletionKind.REPAIR
+
+
+def test_observed_work_product_can_be_delivered_with_a_citation_without_prose():
+    context = _context(observations=[ContextObservation(
+        id="obs-result", tool_name="verification_read", status="succeeded",
+        summary="Created a work product.", artifact_ids=["artifact_result"],
+        capabilities=(EVIDENCE_CAPABILITY,),
+    )])
+    decision = _policy().evaluate(
+        context=context,
+        model_result=_final("{{artifact:artifact_result}}\n\n{{cite:artifact_result}}"),
+        turn_count=3, max_turns=8,
     )
     assert decision.kind is CompletionKind.SYNTHESIZE
 

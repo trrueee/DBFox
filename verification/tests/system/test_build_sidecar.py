@@ -427,12 +427,14 @@ def test_sidecar_build_dependencies_are_separate_from_runtime_dependencies() -> 
     assert any(line.startswith("pyinstaller") for line in requirements.lower().splitlines())
 
 
-def test_removed_local_crypto_is_not_a_direct_runtime_dependency() -> None:
+def test_dlc_signing_dependency_is_explicit_and_retired_ssh_dependencies_are_absent() -> None:
     root = Path(__file__).resolve().parents[3]
     requirements = (root / "requirements.txt").read_text(encoding="utf-8")
     development_requirements = (root / "requirements-dev.txt").read_text(encoding="utf-8")
 
-    assert not any(line.startswith("cryptography") for line in requirements.splitlines())
+    assert any(line.startswith("cryptography") for line in requirements.splitlines())
+    assert not any(line.startswith(("paramiko", "sshtunnel")) for line in requirements.splitlines())
+    assert "sshtunnel" not in build_sidecar.HIDDEN_IMPORTS
     assert "types-cryptography" not in development_requirements
     assert "cryptography" not in build_sidecar.HIDDEN_IMPORTS
     assert not (root / "engine" / "crypto.py").exists()

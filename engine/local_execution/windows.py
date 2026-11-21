@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import ctypes
-import msvcrt
 import os
+import sys
 from ctypes import wintypes as win
 from pathlib import Path
 from threading import Lock
+
+if sys.platform != "win32":
+    raise ImportError("The Windows process backend requires Windows.")
+
+import msvcrt
 
 _kernel = ctypes.WinDLL("kernel32", use_last_error=True)
 _size = ctypes.c_size_t

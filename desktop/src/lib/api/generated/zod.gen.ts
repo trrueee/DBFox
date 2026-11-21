@@ -13,6 +13,13 @@ export const zActiveDlcItem = z.object({
 });
 
 /**
+ * AnswerRequirements
+ */
+export const zAnswerRequirements = z.object({
+    evidence: z.enum(['when_observed', 'required']).optional().default('when_observed')
+});
+
+/**
  * ApprovalPayload
  */
 export const zApprovalPayload = z.object({
@@ -931,6 +938,7 @@ export const zConversationInputReference = z.object({
  * ConversationInputRequest
  */
 export const zConversationInputRequest = z.object({
+    answer_requirements: zAnswerRequirements.nullish(),
     api_base: z.string().max(2048).nullish(),
     content: z.string().min(1).max(20000),
     delivery_mode: zDeliveryMode.optional().default('queue'),

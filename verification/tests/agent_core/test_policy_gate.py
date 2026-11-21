@@ -143,6 +143,80 @@ def test_input_contract_reason_names_schema_locations_without_reflecting_values(
     assert "TOP_SECRET_SENTINEL" not in decision.reason
 
 
+@pytest.mark.parametrize("unknown_field", ["SECRET_FIELD_SENTINEL", "x" * 10000], ids=["unknown", "oversized"])
+def test_input_diagnostics_do_not_reflect_unknown_keys_or_grow_with_them(db_session, unknown_field):
+    decision = PolicyGate(ToolRegistry().register(PolicyTestTool()), db_session).check(
+        _state(), "policy_test", {unknown_field: "PRIVATE_VALUE"},
+    )
+    assert decision.status == "blocked"
+    assert unknown_field not in decision.reason
+    assert "PRIVATE_VALUE" not in decision.reason
+    assert "extra_forbidden" in decision.reason
+    assert len(decision.reason) <= 2048
+
+
+def test_input_diagnostics_keep_declared_nested_locations_but_not_dynamic_keys(db_session):
+    from engine.tools.builtin.control import SubmitAnswerCommand
+
+    registry = ToolRegistry().register(SubmitAnswerCommand())
+    decision = PolicyGate(registry, db_session).check(
+        _state(), "submit_answer",
+        {"parts": [{"text": "PRIVATE_BODY", "citations": [123], "SECRET_NESTED_KEY": True}]},
+    )
+    assert "parts.0.citations.0 (string_type)" in decision.reason
+    assert "SECRET_NESTED_KEY" not in decision.reason
+    assert "PRIVATE_BODY" not in decision.reason
+
+
+def test_input_diagnostics_preserve_schema_declared_discriminator_labels(db_session):
+    from typing import Annotated, Literal
+    from pydantic import Field
+
+    class Append(ToolInputModel):
+        operation: Literal["append"]
+        amount: int
+
+    class Remove(ToolInputModel):
+        operation: Literal["remove"]
+        position: int
+
+    class ChangeInput(ToolInputModel):
+        changes: list[Annotated[Append | Remove, Field(discriminator="operation")]]
+
+    class ChangeTool(PolicyTestTool):
+        input_model = ChangeInput
+
+    decision = PolicyGate(ToolRegistry().register(ChangeTool()), db_session).check(
+        _state(), "policy_test", {"changes": [{"operation": "append", "amount": "PRIVATE_VALUE"}]},
+    )
+    assert decision.status == "blocked"
+    assert "changes.0.append.amount (int_parsing)" in decision.reason
+    assert "PRIVATE_VALUE" not in decision.reason
+
+
+def test_custom_validator_context_and_error_types_are_not_public_diagnostics(db_session):
+    from pydantic import field_validator
+    from pydantic_core import PydanticCustomError
+
+    class PrivateInput(ToolInputModel):
+        value: str
+
+        @field_validator("value")
+        @classmethod
+        def reject(cls, value):
+            raise PydanticCustomError(value, "PRIVATE_MESSAGE {secret}", {"secret": value})
+
+    class PrivateTool(PolicyTestTool):
+        input_model = PrivateInput
+
+    decision = PolicyGate(ToolRegistry().register(PrivateTool()), db_session).check(
+        _state(), "policy_test", {"value": "PRIVATE_DYNAMIC_TYPE"},
+    )
+    assert decision.status == "blocked"
+    assert "value (invalid)" in decision.reason
+    assert "PRIVATE_" not in decision.reason
+
+
 def test_update_plan_empty_call_reports_missing_required_fields(db_session):
     decision = PolicyGate(build_product_tool_registry(), db_session).check(
         _state(allowed_tool_groups=["manage"]),

@@ -14,6 +14,7 @@ from verification.bench.capabilities.dbfox_data.agent.calibration import (
 from verification.bench.capabilities.dbfox_data.agent.schema import (
     ComparisonMode,
     DatasetManifest,
+    EvalCase,
 )
 from verification.bench.capabilities.dbfox_data.agent.scoring import (
     PlanTrace,
@@ -34,6 +35,19 @@ from verification.bench.framework.statistics import distribution, wilson_interva
 
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.mark.parametrize("answer", [" {{cite:artifact_result}} ", "[{{cite:artifact_result}}]", "**{{cite:artifact_result}}**。"])
+def test_a_citation_without_an_answer_is_not_a_completed_user_deliverable(answer: str) -> None:
+    case = EvalCase.model_validate({
+        "case_id": "citation-only", "category": "basic_sql", "capability": "answer delivery",
+        "prompts": ["How many orders?"],
+    })
+    score = score_trial(case, TrialTrace(
+        terminal_status="completed", answer=answer, artifact_ids=("artifact_result",),
+    ))
+    assert not score.passed
+    assert not score.checks["nonempty_answer"]
 
 
 def test_data_agent_scorer_calibration_is_perfect() -> None:
@@ -324,26 +338,26 @@ def test_generated_query_follows_first_answer_cited_result_artifact() -> None:
     artifacts = [
         SimpleNamespace(
             id="artifact_sql_main",
-            type="sql",
+            type="dbfox.data.sql",
             payload_json=json.dumps(
                 {"safeSql": "SELECT main", "parameters": {"value": 1}}
             ),
         ),
         SimpleNamespace(
             id="artifact_result_main",
-            type="result_view",
+            type="dbfox.data.result_view",
             payload_json=json.dumps(
                 {"sourceSqlArtifactId": "artifact_sql_main"}
             ),
         ),
         SimpleNamespace(
             id="artifact_sql_check",
-            type="sql",
+            type="dbfox.data.sql",
             payload_json=json.dumps({"safeSql": "SELECT verification"}),
         ),
         SimpleNamespace(
             id="artifact_result_check",
-            type="result_view",
+            type="dbfox.data.result_view",
             payload_json=json.dumps(
                 {"sourceSqlArtifactId": "artifact_sql_check"}
             ),
@@ -362,6 +376,11 @@ def test_generated_query_follows_first_answer_cited_result_artifact() -> None:
 
     assert sql == "SELECT main"
     assert parameters == {"value": 1}
+
+
+def test_unexecuted_validation_sql_is_never_treated_as_a_generated_result() -> None:
+    candidate = SimpleNamespace(id="artifact_candidate", type="dbfox.data.sql", payload_json=json.dumps({"safeSql": "SELECT invalid"}))
+    assert _select_generated_query([candidate], "No successful execution.", json.loads, citation_references) == (None, None)
 
 
 def test_statistical_summary_reports_tail_and_small_sample_uncertainty() -> None:

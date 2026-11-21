@@ -2,7 +2,7 @@
 
 > 文档类型：架构决定与实现合同
 > 状态：已接受
-> 最后核验：2026-08-28
+> 最后核验：2026-11-22
 > 适用范围：Agent Session、Run、Turn、工具、上下文预算、会话档案、工作记忆、历史查找、部分完成与恢复
 
 ## 1. 目标
@@ -498,3 +498,75 @@ Run；相同工具输入和相同查询指纹的重复次数受独立门禁约�
 - [OpenAI API：Compaction](https://developers.openai.com/api/docs/guides/compaction)
 - [LangGraph：Persistence](https://docs.langchain.com/oss/python/langgraph/persistence)
 - [AutoGen：Managing State](https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/tutorial/state.html)
+
+## 工具输入纠正与文件编辑（Agent 4.6）
+
+### 当前调用与反馈边界
+
+工具名称的唯一来源仍为 `ToolRegistry → ToolMaterialization`。模型使用未物化的名称时，
+Dispatcher 在已有拒绝路径中返回当前 Turn 的至多 24 个准确函数名；空集合明确说明没有
+可调用函数，更多名称仍以已提供定义为准。只显示本轮实际可见的函数，不从全局 Registry
+泄露隐藏、不同 group、执行模式或资源条件不满足的函数。名称提示不构成授权，不解析
+本地名称别名，不猜测相似函数，也不自动重发原调用。
+
+`UNKNOWN_TOOL` 仍以同一 Invocation/Observation 持久拒绝，输入参数不进入该 Invocation；
+原生模型历史维持原样。后续纠正是一次新的模型调用，并继续接受准入、审批、版本和资源
+校验。失败不计为工具执行或实际进展，预算和停止规则未放宽。
+
+PolicyGate 继续使用原 Pydantic 模型进行输入校验。参数诊断关闭 input、ctx 和 URL 输出，
+保留来自已声明 input schema 的字段名和有界集合索引。未知字段及动态字典键统一显示
+`<key>`，不直接反射错误 location 中的输入字符串；自定义错误类型只显示 `invalid`。
+标准错误类型由现有 `pydantic_core.ErrorType` 的公共定义确定，不维护私有错误码映射表，
+也不输出自定义验证消息、异常上下文或原始参数。最多显示八条诊断，诊断正文有长度上限。
+错误不会变成合法参数，只有新提交的完整调用能重新进入执行边界。
+
+这里收集的是声明 schema 的字段词汇，不是新 Schema validator、字段重命名器或参数修复
+系统；不新增状态、依赖安装、Registry、Tool 或模型调用。
+
+### Workspace 文本编辑合同
+
+编辑语义由 Workspace DLC 的 `WorkspaceService.edit_text_file` 拥有，Tool 与正式
+`files.edit` Operation 共用实现。`file_edit@3` 保持既有参数结构，明确区分：
+
+- `file_read` 原样返回 UTF-8 文本，sha256 始终覆盖原始文件字节，分页位置保持原合同。
+- 文件统一使用 LF 或 CRLF 时，先将本次旧文本和替换文本的这两种换行表示统一到文档
+  约定，再进行唯一性检查和精确替换。没有换行的文件以 LF 作为插入新行的约定。
+- 混合换行和仅 CR 的文件继续按字面匹配、按字面替换，不猜测整份文件的换行风格。
+- 不修正缩进、空白、大小写、标点或字面量转义，不采用相似度匹配；未指定 replace_all
+  时，包括相互重叠位置在内的歧义锚点必须拒绝，不能用只计算非重叠次数的 str.count
+  冒充唯一性证明。
+- 统一后相同的旧/新文本属于 no-op，拒绝制造修改成果。`replace_all` 仍须显式指定，
+  按标准字符串替换从左到右处理非重叠匹配。
+- 未命中的内容和周围字节保持原样；UTF-8 编码、1 MiB 限制、当前 hash、绑定代次、写事务、
+  写前再次校验和原子发布都沿用原实现。外部编辑或撤销不自动重试。
+
+这不是让 Core 解释换行，也不是先做危险写入再用 fallback 修补文件。读、hash、文件写入
+与冲突保护的语义未改变；`file_write` 仍写入明确提供的完整内容。
+
+### 调查、取舍与 Kernel 七问
+
+调查项目现有名称物化、PolicyGate 的 Pydantic 反馈、WorkspaceService 和跨进程写保护，
+以及既有真实模型轨迹、相关历史提交。参考
+[Pydantic 结构化错误](https://docs.pydantic.dev/latest/api/pydantic_core/#pydantic_core.ValidationError.errors)、
+[VS Code 文本编辑](https://code.visualstudio.com/api/references/vscode-api#TextEditorEdit)、
+[Codex patch 匹配实现](https://github.com/openai/codex/blob/main/codex-rs/apply-patch/src/seek_sequence.rs)
+和 [Anthropic 工具设计](https://www.anthropic.com/research/writing-tools-for-agents)。
+采用已有类型和工具反馈，文本编辑只借鉴文档换行归一原则。不引入另一套 Agent、Rust patch
+运行时或 diff 依赖；现有带 hash 的替换足以覆盖这项需要，不采用空白/标点模糊匹配。
+
+1. 规范函数名的纠正反馈和错误信息不反射任意输入，是多个 capability 共同的 Runtime
+   边界；换行编辑则明确只由 Workspace owner 修复。
+2. 已有 Registry、物化、Policy、Invocation 与 Observation 可以直接表达反馈，不需要
+   新发现工具、第二份目录或持久选择状态。
+3. 单个 DLC 不拥有本轮全局物化集合或 Policy 校验，不能可靠修复这两个公共边界；文件
+   编辑不进入 Kernel。
+4. 反馈来自本轮冻结定义和声明 schema，保持 provider-neutral、owner-bound；只提示
+   原有能力，不放宽执行、审批或资源授权。
+5. 无别名执行、参数 mapper、自动纠错、兼容层、双写或新框架。新增代码位于实际输入/
+   反馈边界，文本编辑继续使用一个 owner 实现。
+6. API v2、HTTP、数据库 schema 和前端合同不变。`file_edit` 声明版本升为 3，合同与包
+   digest 随正式装配更新；旧冻结版本不改写，待执行调用仍须通过既有版本核验，不能
+   借新实现重放旧审批。输入字段与 Artifact schema 无需迁移。
+7. 回归包括改前失败反例、未知名称拒绝与幂等、名称可见性、参数诊断边界、真实 RunLoop
+   纠正、LF/CRLF、混合换行、Unicode、no-op、唯一性、外部写冲突、包 conformance 与
+   真实本地模型。实际通过、失败和未验证项见 [Phase 0 质量记录](../quality/local-data-phase0.md)。

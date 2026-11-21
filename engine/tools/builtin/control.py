@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from engine.agent.answer_submission import AnswerSubmission
 from engine.agent.repositories.plan import (
     PlanArtifactUnavailableError,
     PlanRepository,
@@ -8,6 +9,8 @@ from engine.agent.repositories.plan import (
 from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.errors import ToolInputError
+from engine.json_codec import load_array
+from engine.models import AgentTurn
 from engine.tools.builtin.contracts import (
     AcknowledgementOutput,
     RequestClarificationInput,
@@ -127,4 +130,41 @@ class UpdatePlanCommand(ControlCommand[UpdatePlanInput, UpdatePlanOutput]):
                 "steps": [step.model_dump(mode="json") for step in plan.steps],
                 "summary": plan.summary,
             },
+        )
+
+
+class SubmitAnswerCommand(ControlCommand[AnswerSubmission, AcknowledgementOutput]):
+    name = "submit_answer"
+    description = (
+        "Submit the complete final answer as Markdown fragments with structured citations. "
+        "Put exact observed Artifact IDs in each part's citations; do not write citation markup. "
+        "Parts are concatenated verbatim, so include needed newlines. Call this function alone, "
+        "after all work and plan updates. Runtime validates sources and completion; submission "
+        "is not proof of task success. Ordinary answers without sources may use assistant text."
+    )
+    input_model = AnswerSubmission
+    output_model = AcknowledgementOutput
+    presentation = ToolPresentation(
+        title="整理回答", category="manage", visibility="details", progress="none",
+    )
+    policy = ToolPolicy(risk_level="safe")
+
+    def handle(
+        self, command_input: AnswerSubmission, context: ControlCommandContext,
+    ) -> ControlCommandResult[AcknowledgementOutput]:
+        del command_input
+        turn = context.db.get(AgentTurn, context.turn_id)
+        calls = load_array(str(turn.tool_calls_json or "[]")) if turn is not None else []
+        if (
+            turn is None or str(turn.run_id) != context.run_id
+            or turn.termination != "completed" or turn.status != "completed"
+            or len(calls) != 1 or not isinstance(calls[0], dict) or calls[0].get("name") != self.name
+        ):
+            raise ToolInputError(
+                "Call submit_answer alone in a completed response, after all other work and plan updates."
+            )
+        return ControlCommandResult(
+            disposition=ControlDisposition.SETTLED,
+            output=AcknowledgementOutput(),
+            summary="回答候选已接收，仍需通过来源与完成校验。",
         )

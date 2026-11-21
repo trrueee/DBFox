@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-11-18
+> 最后核验：2026-11-21
 >
 > 适用范围：Windows 11 x64、Sidecar Host 能力、Agent、Electron 与工作台
 
@@ -59,6 +59,36 @@ uv 哈希锁工作流生成、安装与 Frozen 验证。主要成本是 Playwrig
 观察是不可变工件，包含来源身份、时间、界面范围、可用元素和图片引用。操作引用明确的观察；
 检查目标仍存在、进程身份与范围仍一致、元素仍属于该观察，再在实际副作用前检查授权和取消。
 操作后返回新的实际观察。程序接收输入不等于用户任务完成，界面分别显示操作事实和任务结束。
+
+### 浏览器派发与等待
+
+真实 Edge 的延迟导航证明，原同步 Playwright 调用会把网络等待包含在 SQLite 写事务中，
+阻塞其他 Session 的停止。保留 `effect_lease` 的授权、代次和取消检查，将 Host 内部动作
+明确分为即时派发和等待；不以删除围栏或增加第二套授权锁解决。
+
+- 复用 Playwright 官方异步 API。现有电脑 worker 上的标准库 `asyncio.Runner` 驱动浏览器
+  I/O；`eager_task_factory` 在授权事务内启动一次操作至首次挂起，不将未经围栏检查的
+  操作留给另一个线程稍后发送。事务结束后等待同一个 Future，不再次调用浏览器动作。
+- `PreparedAction` 是 Native/Browser 驱动共同的内部派发合同。Native 输入仍同步派发，
+  不宣称所有 UIA/COM 操作都已消除等待。Runner 不拥有 Agent Run、审批或耐久状态。
+- 已派发后即使元数据提交失败，仍排空该次等待并报告 `COMPUTER_OUTCOME_UNKNOWN`。
+  操作可能已发生，不能因数据库回滚而重放；用户需重新观察。
+- 停止仍先设置取消围栏，再更新持久授权并关闭浏览器 Job。已发出的页面动作不可撤回；
+  等待期间停止会中断连接，后续观察/输入须重新校验当前授权。
+
+| 失败位置 | 结果 |
+| --- | --- |
+| 派发前授权失效或已取消 | 不发送动作 |
+| 派发后页面迟缓 | 写事务已经结束；等待同一操作，不阻塞其他 Session 写入 |
+| 派发后事务提交失败 | 返回结果未知；保留实际副作用，不自动重试 |
+| 等待期间停止、断连 | 中断等待，保持暂停/未知语义，不恢复或重放输入 |
+
+复用选择依据为 [Playwright 异步用法](https://playwright.dev/python/docs/library#usage)、
+[Python eager task factory](https://docs.python.org/3.12/library/asyncio-task.html#eager-task-factory)
+和 [SQLite 单 writer 规则](https://www.sqlite.org/lang_transaction.html)。不增加依赖、
+目标锁注册表、兼容执行分支或 RPC。Playwright 升级需保留真实浏览器竞态合同，验证
+派发先后和恰好一次请求，不能只依赖模拟 Future。实测及限制见
+[Phase 0 记录](../quality/local-data-phase0.md)。
 
 ## 前端交互
 

@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-24
+> 最后核验：2026-11-21
 >
 > 适用范围：`verification/bench/`、`verification/tests/bench/` 与 Agent evaluation workflow
 
@@ -75,6 +75,8 @@ Core suite 不能把 `dbfox.*` DLC 写进被测主体；Capability suite 只能�
 
 Data scorer 校准、离线 replay 和真实 Provider 重复运行仍由该 capability suite 自己拥有。Framework 不理解 SQL、Table、Catalog 或 golden SQL。
 
+真实 Provider 的新 Run 与当前桌面输入一致，声明 `answer_requirements.evidence=when_observed`；该要求由准入冻结，沿用正式 Completion/Terminalizer。测试题的结果、轨迹与引用标准仍由原 scorer 检查，不将黄金 SQL、预期值或个例要求注入产品请求。历史报告保留其实际 Agent/Prompt 版本。
+
 ### 3.6 `composition.data_workspace.scripted`
 
 首个 CompositionBench 创建一个 Project、一个 Data database resource 和一个 Workspace resource，由服务器冻结 canonical ResourceRefs 后交给同一个生产 Run。Scripted Provider 依次调用 `file_read` 和 `schema_list`，suite scorer 检查最终 handoff、双资源 authority、Workspace Artifact lineage、源数据库与工作区无写入，以及 Turn/Tool 预算。
@@ -131,3 +133,31 @@ python -m verification.bench replay capability.dbfox_data.agent `
 实现前调查了仓库现有生产 RunLoop、pytest fixtures、DLC snapshot/resource authority、旧 60-case runner、CI 和历史设计；也参考了 [pytest 的外置测试与 importlib 建议](https://docs.pytest.org/en/7.1.x/explanation/goodpractices.html)、[Inspect 的 Task = Dataset + Solver + Scorer](https://inspect.aisi.org.uk/tasks.html) 与 [scorer/metric 分离](https://inspect.aisi.org.uk/standard-scorers.html)、[OpenAI Evals 的 data source + grader 合同](https://platform.openai.com/docs/api-reference/evals)。
 
 最终复用现有 Pydantic、pytest、production Session/RunLoop/DLC contracts、System DLC package builder 和旧 Data scorer；没有引入 Inspect/PyYAML 等新依赖。未采用外部 Solver，是因为它会绕开 DBFox durable Agent lifecycle，无法测到真实产品 Harness。新增的 Framework 只覆盖真实共享轴，不包含 SQL/Workspace/GitHub 语义，也没有兼容层、双写或产品测试 hook。`verification/testkit/system_dlc_fixture.py` 只最小组合正式签名与 System DLC 构建入口，避免触碰用户 app runtime。
+
+
+## 本机模型与隔离激活
+
+Suite catalog 仅登记可信的标准库 EntryPoint 字符串，选中 suite 后才导入其 runtime。
+这样 Data Agent 的隔离环境可在导入 engine.db 之前确定，保留原来的数据库身份检查。
+生产模型路径使用 `build_product_run_loop`，评测只替换外部模型刺激或选择实际本机 profile，
+不复制生产 RunLoop 的装配配置。
+
+```powershell
+$env:DBFOX_RUN_REAL_LLM = "1"
+python -m verification.bench run capability.dbfox_data.agent `
+  --local-model-profile .tmp/local-evaluation/local-model.json `
+  --case sql-count-orders --case sql-null-payments --case sql-segment-count `
+  --repetitions 3 --keep-runtime --output .tmp/local-evaluation/report
+```
+
+profile 必须是已存在安装的验证副本，状态与临时文件指向私有且有空间的目录，权重仍复用
+用户已安装的模型。该分支不解析云端凭据；本机不可用就明确失败，不下载或切换模型。
+`--keep-runtime` 只保留隔离合成数据、Run/Invocation/Artifact 证据，默认仍清理该 runtime。
+每题完成后额外保存 checkpoint，后续 oracle 失败不再使前面结果全部丢失。
+
+评分使用注册表规范工具身份、真实拒绝的未知工具以及命名空间 Artifact 类型；查询 oracle
+只能沿已执行 Result 的 sourceSqlArtifactId 复算，不采用未执行的候选 SQL。数据库行顺序
+只有在题目要求时计分；单独引用及其常见 Markdown 包装不算向用户交付正文。
+Data regression 版本为 1.2.1。任何旧轨迹重评保留原文件和评分来源，不能伪称模型重跑。
+
+详细配置、配对失败与验证限制见 [本地 Phase 0](local-data-phase0.md)。

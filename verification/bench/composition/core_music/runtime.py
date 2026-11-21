@@ -92,13 +92,10 @@ class _MusicProvider:
 
 
 def _run_case(factory: sessionmaker[Session], snapshot: Any, suite_id: str, case: CoreMusicCase, repetition: int) -> TrialOutcome:
-    from engine.agent.completion import CompletionGate
-    from engine.agent.events import LiveStreamHub
-    from engine.agent.loop import RunLoop
     from engine.agent.repositories.session import SessionRepository
     from engine.agent.resource_refs import RequestedResourceRef
     from engine.models import AgentArtifactRecord, AgentMessage, AgentRun, AgentToolInvocation, AgentTurn, Project
-    from engine.runtime_composition import authorize_project_resources, build_attempt_resource_resolver, build_default_completion_policy, build_product_tool_registry, default_capability_guidance, default_context_contributors
+    from engine.runtime_composition import authorize_project_resources, build_product_run_loop
 
     project_id = f"core-music-{case.case_id}-{repetition}-{uuid4().hex[:8]}"
     with factory() as db:
@@ -124,16 +121,9 @@ def _run_case(factory: sessionmaker[Session], snapshot: Any, suite_id: str, case
     def model_factory(_settings):
         calls["count"] += 1
         return _MusicProvider(case, calls["count"], provider_evidence)
-    product_registry = build_product_tool_registry(snapshot)
-    loop = RunLoop(
-        session_factory=factory, model_factory=model_factory,
-        registry=product_registry,
-        context_contributors=default_context_contributors(snapshot),
-        capability_guidance=default_capability_guidance(snapshot),
-        completion=CompletionGate(build_default_completion_policy(snapshot)),
-        live_stream=LiveStreamHub(),
-        resource_resolver=build_attempt_resource_resolver(snapshot=snapshot),
-    )
+    loop = build_product_run_loop(session_factory=factory, snapshot=snapshot)
+    product_registry = loop.registry
+    loop.model_factory = model_factory
     try:
         loop.execute(lease=lease, run_id=admission.run_id)
     finally:
@@ -154,11 +144,11 @@ def _run_case(factory: sessionmaker[Session], snapshot: Any, suite_id: str, case
             for turn in turn_records
             for item in json.loads(str(turn.context_snapshot_json or "{}")).get("capability_guidance", [])
         ]
+        music_guidance = [item for item in guidance_materializations if item.get("owner_id") == "dbfox.music"]
         guidance_ok = bool(
-            guidance_materializations
-            and all(item.get("owner_id") == "dbfox.music" for item in guidance_materializations)
-            and all(item.get("id") == "piano_composition" for item in guidance_materializations)
-            and all(str(item.get("hash") or "").startswith("sha256:") for item in guidance_materializations)
+            music_guidance
+            and all(item.get("id") == "piano_composition" for item in music_guidance)
+            and all(str(item.get("hash") or "").startswith("sha256:") for item in music_guidance)
         )
         checks = {
             "completed": run is not None and str(run.status) == "completed",
@@ -188,7 +178,8 @@ def _run_case(factory: sessionmaker[Session], snapshot: Any, suite_id: str, case
                 "runtime.turns": float(turns), "runtime.tool_calls": float(len(invocations)),
             },
             failed_checks=failed,
-            evidence={"run_status": str(run.status) if run else "missing", "resource_refs": tuple((ref.kind, ref.id, ref.version) for ref in refs), "artifact_types": tuple(item.type for item in artifacts), "capability_guidance": guidance_materializations},
+            evidence={"run_status": str(run.status) if run else "missing", "resource_refs": tuple((ref.kind, ref.id, ref.version) for ref in refs), "artifact_types": tuple(item.type for item in artifacts), "capability_guidance": guidance_materializations,
+                      "tool_failures": tuple({"status": item.status, "error_code": item.error_code} for item in invocations if item.status != "succeeded")},
         )
 
 

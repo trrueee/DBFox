@@ -301,11 +301,13 @@ class WorkspaceFileEditTool(BaseTool[FileEditInput, FileMutationOutput]):
     group = "workspace"
     description = (
         "Edit a previously read UTF-8 file by exact string replacement. The "
-        "old string must be unique unless replace_all is true, and sha256 must match."
+        "old string must be unique unless replace_all is true, and sha256 must match. "
+        "In consistently LF/CRLF files, either newline form is accepted and replacements "
+        "preserve the document's convention. No whitespace or fuzzy matching."
     )
     input_model = FileEditInput
     output_model = FileMutationOutput
-    version = "2"
+    version = "3"
     policy = ToolPolicy(risk_level="warning", requires_approval=True)
     execution = ToolExecutionSpec(
         backend="isolated_process",

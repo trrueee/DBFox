@@ -28,6 +28,9 @@ from engine.agent.context_budget import (
     ContextPriority,
     ContextSegmentKind,
 )
+from engine.agent.plan import TaskPlan
+from engine.agent.answer_requirements import AnswerRequirements
+from engine.agent.repositories.plan import PlanRepository
 from engine.agent.context_fragment import (
     ContextArtifactObservation,
     ContextContributionInput,
@@ -47,7 +50,7 @@ from engine.agent.references import (
     ConversationInputReference,
     load_input_references,
 )
-from engine.agent.artifact import Artifact
+from engine.agent.artifact import Artifact, ArtifactVisibility
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.representation import ArtifactRepresentationDescriptor
 from engine.app.safe_errors import fixed_error_detail
@@ -232,6 +235,10 @@ class ContextSnapshot(BaseModel):
     previous_run_outcome: PreviousRunOutcome | None = None
     sources: list[ContextSource] = Field(default_factory=list)
     hash: str
+    task_plan: TaskPlan | None = None
+    answer_requirements: AnswerRequirements | None = None
+    citable_artifact_ids: list[str] = Field(default_factory=list)
+    has_observed_public_artifacts: bool = False
 
     def model_message_plan(
         self,
@@ -393,20 +400,6 @@ class ContextSnapshot(BaseModel):
                     ),
                     priority=ContextPriority.CONVERSATION_ARCHIVE,
                     prefix='<dbfox_context source="conversation_archive">\n',
-                    suffix="\n</dbfox_context>",
-                )
-            )
-        if self.run_focus:
-            segments.append(
-                ContextBudgetSegment(
-                    kind=ContextSegmentKind.RUN_FOCUS,
-                    role="user",
-                    payload=(
-                        "Deterministic completion guidance (trusted product decision, not user data):\n"
-                        + _canonical(self.run_focus)
-                    ),
-                    priority=ContextPriority.RUN_FOCUS,
-                    prefix='<dbfox_context source="run_focus">\n',
                     suffix="\n</dbfox_context>",
                 )
             )
@@ -586,6 +579,32 @@ class ContextAssembler:
             )
         )
         observations = self._observations(run, sources)
+        requirements_payload = _json_object(run.request_json).get("answer_requirements")
+        answer_requirements = (
+            AnswerRequirements.model_validate(requirements_payload)
+            if requirements_payload is not None else None
+        )
+        source_repository = ArtifactRepository(self.session, resource_discovery=self.resource_discovery)
+        citable_artifact_ids = [
+            artifact.id for artifact in source_repository.observed_artifacts_for_run(run_id)
+            if artifact.visibility is not ArtifactVisibility.INTERNAL
+        ] if answer_requirements is not None else []
+        has_observed_public_artifacts = (
+            source_repository.has_observed_public_artifacts(run_id) if answer_requirements is not None else False
+        )
+        if answer_requirements is not None:
+            sources.append(ContextSource(
+                kind="answer_requirements", source_id=str(run.id), version="1",
+                included=True, reason="delivery requirements frozen at input admission",
+                provenance={"canonical_table": "agent_runs", "field": "request_json.answer_requirements"},
+            ))
+        task_plan = PlanRepository(self.session).current(run_id)
+        if task_plan is not None:
+            sources.append(ContextSource(
+                kind="task_plan", source_id=task_plan.id, version=str(task_plan.version),
+                included=True, reason="current durable plan, independent of native transcript retention",
+                provenance={"canonical_table": "agent_task_plans"},
+            ))
         # Capability-owned durable context is supplied through Context
         # contributors. The Kernel does not interpret database/catalog memory.
         memory: dict[str, Any] = {}
@@ -672,6 +691,10 @@ class ContextAssembler:
             "session_memory": memory,
             "conversation_archive": conversation_archive,
             "run_focus": run_focus if isinstance(run_focus, dict) else {},
+            "task_plan": task_plan.model_dump(mode="json") if task_plan is not None else None,
+            "answer_requirements": answer_requirements.model_dump(mode="json") if answer_requirements is not None else None,
+            "citable_artifact_ids": citable_artifact_ids,
+            "has_observed_public_artifacts": has_observed_public_artifacts,
             "previous_run_outcome": (
                 previous_run_outcome.model_dump(mode="json")
                 if previous_run_outcome is not None
@@ -699,6 +722,10 @@ class ContextAssembler:
             session_memory=memory,
             conversation_archive=conversation_archive,
             run_focus=run_focus if isinstance(run_focus, dict) else {},
+            task_plan=task_plan,
+            answer_requirements=answer_requirements,
+            citable_artifact_ids=citable_artifact_ids,
+            has_observed_public_artifacts=has_observed_public_artifacts,
             previous_run_outcome=previous_run_outcome,
             sources=sources,
             hash=digest,

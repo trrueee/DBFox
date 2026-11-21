@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import heapq
 import os
+import re
 import signal
 import sqlite3
 import subprocess
@@ -371,17 +372,20 @@ class WorkspaceService:
             raise WorkspaceConflict("文件已变更，本次修改未执行。请保留当前内容，等待新的修改指令。")
         if not old_string:
             raise WorkspaceError("old_string must not be empty")
-        occurrences = snapshot.content.count(old_string)
-        if occurrences == 0:
-            if "\r\n" in snapshot.content and old_string in snapshot.content.replace("\r\n", "\n"):
-                raise WorkspaceError(
-                    "old_string was not found because the file uses CRLF line endings. "
-                    "Preserve \\r\\n in the anchor or choose a smaller unique anchor without line breaks. No changes were made."
-                )
+        # Match text in the document's unambiguous line-ending convention. This
+        # changes neither indentation nor surrounding bytes; mixed/CR-only files
+        # retain literal matching. The optimistic hash always covers raw bytes.
+        endings = {match.group() for match in re.finditer(r"\r\n|\r|\n", snapshot.content)}
+        if endings <= {"\n"} or endings == {"\r\n"}:
+            eol = "\r\n" if endings == {"\r\n"} else "\n"
+            old_string = old_string.replace("\r\n", "\n").replace("\n", eol)
+            new_string = new_string.replace("\r\n", "\n").replace("\n", eol)
+        first_match = snapshot.content.find(old_string)
+        if first_match < 0:
             raise WorkspaceError("old_string was not found")
-        if occurrences > 1 and not replace_all:
+        if not replace_all and snapshot.content.find(old_string, first_match + 1) >= 0:
             raise WorkspaceError(
-                f"old_string occurs {occurrences} times; use a unique anchor or replace_all"
+                "old_string occurs more than once; use a unique anchor or replace_all"
             )
         if old_string == new_string:
             raise WorkspaceError("old_string and new_string are identical")

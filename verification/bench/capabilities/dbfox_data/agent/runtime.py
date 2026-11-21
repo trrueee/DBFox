@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 import os
@@ -34,8 +34,11 @@ class EvaluationConfigurationError(RuntimeError):
 @dataclass(frozen=True)
 class RealProviderIdentity:
     model: str
-    api_base: str
+    api_base: str | None
     credential_reference: str
+    model_digest: str | None = None
+    context_length: int | None = None
+    runtime_evidence: dict[str, Any] | None = None
 
 
 def _mask(value: str) -> str:
@@ -140,19 +143,20 @@ def _select_generated_query(
     """Resolve the first answer-cited result to its authoritative SQL artifact."""
 
     by_id = {str(item.id): item for item in artifacts}
-    sql_artifacts = [item for item in artifacts if str(item.type) == "sql"]
-    selected_sql = sql_artifacts[-1] if sql_artifacts else None
+    results = {str(item.id): item for item in artifacts if str(item.type) == "dbfox.data.result_view"}
+    selected_result = None
     for artifact_id, _start, _end in citation_references(answer):
-        result_artifact = by_id.get(artifact_id)
-        if result_artifact is None or str(result_artifact.type) != "result_view":
-            continue
-        result_payload = load_object(str(result_artifact.payload_json or "{}"))
-        source_id = str(result_payload.get("sourceSqlArtifactId") or "").strip()
-        source_artifact = by_id.get(source_id)
-        if source_artifact is not None and str(source_artifact.type) == "sql":
-            selected_sql = source_artifact
+        if artifact_id in results:
+            selected_result = results[artifact_id]
             break
-    if selected_sql is None:
+    if selected_result is None:
+        selected_result = list(results.values())[-1] if results else None
+    if selected_result is None:
+        return None, None
+    result_payload = load_object(str(selected_result.payload_json or "{}"))
+    source_id = str(result_payload.get("sourceSqlArtifactId") or "").strip()
+    selected_sql = by_id.get(source_id)
+    if selected_sql is None or str(selected_sql.type) != "dbfox.data.sql":
         return None, None
     payload = load_object(str(selected_sql.payload_json or "{}"))
     generated_sql = str(payload.get("safeSql") or "").strip() or None
@@ -253,7 +257,7 @@ def _infrastructure_reason(status: str, error_code: str | None) -> str | None:
     if status == "runner_failed":
         return error_code or "runner_failed"
     code = str(error_code or "")
-    if code.startswith("LLM_") or code in {
+    if code.startswith(("LLM_", "LOCAL_MODEL_")) or code in {
         "AGENT_PROVIDER_RETRY_BUDGET",
         "AGENT_COST_PRICING_UNAVAILABLE",
         "MODEL_PROVIDER_TIMEOUT",
@@ -275,6 +279,7 @@ def run_real_provider(
     cases: tuple[EvalCase, ...],
     repetitions: int,
     work_dir: Path,
+    local_model_profile: Path | None = None,
 ) -> tuple[tuple[TrialRecord, ...], RealProviderIdentity]:
     """Run natural-language tasks through the production RunLoop.
 
@@ -285,7 +290,7 @@ def run_real_provider(
 
     if os.getenv("DBFOX_RUN_REAL_LLM") != "1":
         raise EvaluationConfigurationError(
-            "Set DBFOX_RUN_REAL_LLM=1 to acknowledge network use and model cost."
+            "Set DBFOX_RUN_REAL_LLM=1 to acknowledge real model execution."
         )
     if not 1 <= repetitions <= 5:
         raise ValueError("repetitions must be between 1 and 5")
@@ -296,22 +301,33 @@ def run_real_provider(
         datasource_path,
         Path(__file__).resolve().parent / "datasets" / "sqlite-seed-v1.sql",
     )
-    config, identity = _resolve_provider_config()
+    from engine.llm.local_model import ManagedLocalModel
+    from engine.llm.config import LlmConfigurationError
+    from threading import Event, Thread
 
-    from engine.agent.completion import CompletionGate
-    from engine.agent.events import LiveStreamHub
+    local_model = ManagedLocalModel(local_model_profile) if local_model_profile is not None else None
+    if local_model is not None:
+        try:
+            profile = local_model.require_profile()
+        except LlmConfigurationError as exc:
+            raise EvaluationConfigurationError(f"Local model unavailable: {exc.code}") from None
+        config = None
+        identity = RealProviderIdentity(
+            model=profile.model_name, api_base=None, credential_reference="local-profile",
+            model_digest=profile.model_digest, context_length=profile.context_length,
+        )
+    else:
+        config, identity = _resolve_provider_config()
+
     from engine.agent.evidence import citation_references
-    from engine.agent.loop import RunLoop
+    from engine.agent.answer_requirements import AnswerRequirements
     from engine.agent.providers.openai import OpenAIModelAdapter
     from engine.agent.repositories.session import SessionRepository
     from engine.agent.resource_refs import RequestedResourceRef
     from engine.dlc.api import DlcOperationContext
     from engine.runtime_composition import (
         authorize_project_resources,
-        build_default_completion_policy,
-        build_product_tool_registry,
-        default_capability_guidance,
-        default_context_contributors,
+        build_product_run_loop,
         initialize_runtime_snapshot,
     )
     from engine.db import (
@@ -392,6 +408,7 @@ def run_real_provider(
         raise RuntimeError("Data CapabilityBench database authority was not frozen exactly once")
     session_factory = SessionLocal
     secret = str(getattr(config, "api_key", "") or "")
+    first_delta_ms: dict[str, float] = {}
 
     def create_session(case: EvalCase, repetition: int) -> str:
         with session_factory() as db:
@@ -431,12 +448,14 @@ def run_real_provider(
                     f"data-bench-{manifest.dataset_version}-{case.case_id}-"
                     f"{repetition}-{prompt_index}"
                 ),
-                llm_credential_id="data-bench-configured-provider",
+                llm_credential_id="data-bench-configured-provider" if local_model is None else None,
                 api_base=identity.api_base,
                 model_name=identity.model,
                 request_payload={
                     "evaluation_dataset": manifest.dataset_id,
                     "evaluation_case": case.case_id,
+                    "answer_requirements": AnswerRequirements().model_dump(mode="json"),
+                    **({"model_digest": identity.model_digest} if local_model is not None else {}),
                 },
             )
             lease = sessions.claim(
@@ -449,7 +468,30 @@ def run_real_provider(
             sessions.promote_next_input(lease=lease)
             db.commit()
 
-        loop.execute(lease=lease, run_id=admission.run_id)
+        subscription = loop.live_stream.subscribe(admission.run_id)
+        finished = Event()
+        started = time.perf_counter()
+
+        def observe_first_output() -> None:
+            try:
+                while True:
+                    delta = subscription.receive(timeout=0.05)
+                    if delta is not None and delta.content:
+                        first_delta_ms[admission.run_id] = (time.perf_counter() - started) * 1000
+                        return
+                    if finished.is_set():
+                        return
+            finally:
+                subscription.close()
+
+        observer = Thread(target=observe_first_output, name="bench-first-stream-delta", daemon=True)
+        observer.start()
+        try:
+            loop.execute(lease=lease, run_id=admission.run_id)
+        finally:
+            finished.set()
+            observer.join(timeout=1)
+            subscription.close()
         return admission.run_id, admission.assistant_message_id
 
     def collect(
@@ -516,7 +558,7 @@ def run_real_provider(
                 else []
             )
             result_artifacts = [
-                item for item in artifacts if str(item.type) == "result_view"
+                item for item in artifacts if str(item.type) == "dbfox.data.result_view"
             ]
             query_fingerprints: list[str] = []
             for artifact in result_artifacts:
@@ -639,6 +681,21 @@ def run_real_provider(
                 if plan is not None and str(event.run_id or "") == str(plan.run_id)
             ]
             run_traces: list[RunTrace] = []
+            tool_traces = {
+                str(item.id): ToolTrace(
+                    # Unknown model names are rejected attempts, not evaluator
+                    # infrastructure failures. Keep their literal identity.
+                    name=(loop.registry.require(str(item.tool_name)).name
+                          if str(item.tool_name) in loop.registry else str(item.tool_name)),
+                    owner_id=loop.registry.owner_of(str(item.tool_name)),
+                    provider_name=str(item.tool_name),
+                    status=str(item.status),
+                    error_code=str(item.error_code) if item.error_code else None,
+                    attempt_count=int(item.attempt_count or 0),
+                    input_hash=str(item.input_hash or ""),
+                    latency_ms=_duration_ms(item.started_at, item.completed_at),
+                ) for item in tools
+            }
             for run in runs:
                 if run is None:
                     continue
@@ -657,22 +714,7 @@ def run_real_provider(
                     RunTrace(
                         status=str(run.status),
                         error_code=(str(run.error_code) if run.error_code else None),
-                        tools=tuple(
-                            ToolTrace(
-                                name=str(item.tool_name),
-                                status=str(item.status),
-                                error_code=(
-                                    str(item.error_code) if item.error_code else None
-                                ),
-                                attempt_count=int(item.attempt_count or 0),
-                                input_hash=str(item.input_hash or ""),
-                                latency_ms=_duration_ms(
-                                    item.started_at,
-                                    item.completed_at,
-                                ),
-                            )
-                            for item in run_tools
-                        ),
+                        tools=tuple(tool_traces[str(item.id)] for item in run_tools),
                         turn_count=len(run_turns),
                         token_count=int(run.consumed_tokens or 0),
                         latency_ms=_duration_ms(run.started_at, run.completed_at),
@@ -682,17 +724,8 @@ def run_real_provider(
             trace = TrialTrace(
                 terminal_status=str(final_run.status) if final_run else "runner_failed",
                 answer=text,
-                tools=tuple(
-                    ToolTrace(
-                        name=str(item.tool_name),
-                        status=str(item.status),
-                        error_code=str(item.error_code) if item.error_code else None,
-                        attempt_count=int(item.attempt_count or 0),
-                        input_hash=str(item.input_hash or ""),
-                        latency_ms=_duration_ms(item.started_at, item.completed_at),
-                    )
-                    for item in tools
-                ),
+                first_output_latency_ms=next((first_delta_ms[value] for value in run_ids if value in first_delta_ms), None),
+                tools=tuple(tool_traces[str(item.id)] for item in tools),
                 artifact_types=tuple(str(item.type) for item in artifacts),
                 artifact_ids=tuple(str(item.id) for item in artifacts),
                 turn_count=len(turns),
@@ -757,15 +790,12 @@ def run_real_provider(
                 else None
             )
 
-    loop = RunLoop(
-        session_factory=session_factory,
-        model_factory=lambda _settings: OpenAIModelAdapter.from_config(config),
-        registry=build_product_tool_registry(snapshot),
-        context_contributors=default_context_contributors(snapshot),
-        capability_guidance=default_capability_guidance(snapshot),
-        completion=CompletionGate(build_default_completion_policy(snapshot)),
-        live_stream=LiveStreamHub(),
-    )
+    loop = build_product_run_loop(session_factory=session_factory, snapshot=snapshot, local_model=local_model)
+    if local_model is None:
+        # Only the remote test credential boundary is supplied by this evaluator.
+        # Managed local runs retain the complete production factory and budgets.
+        assert config is not None
+        loop.model_factory = lambda _settings: OpenAIModelAdapter.from_config(config)
     records: list[TrialRecord] = []
     try:
         for repetition in range(1, repetitions + 1):
@@ -815,15 +845,11 @@ def run_real_provider(
                 )
                 if case.result is not None and generated_payload:
                     generated = json.loads(generated_payload)
-                    updates["generated_result"] = _query_table(
-                        datasource_path,
-                        generated["sql"],
-                        generated.get("parameters"),
-                    )
-                    updates["golden_result"] = _query_table(
-                        datasource_path,
-                        case.result.golden_sql,
-                    )
+                    try:
+                        updates["generated_result"] = _query_table(datasource_path, generated["sql"], generated.get("parameters"))
+                        updates["golden_result"] = _query_table(datasource_path, case.result.golden_sql)
+                    except sqlite3.Error as exc:
+                        updates["infrastructure_error"] = "RESULT_ORACLE_ERROR:" + type(exc).__name__
                 trace = trace.model_copy(update=updates)
                 score = score_trial(case, trace)
                 records.append(
@@ -836,13 +862,43 @@ def run_real_provider(
                         score=score,
                     )
                 )
+                # Preserve completed trial evidence if a later trial fails.
+                checkpoints = work_dir / "trial-records"
+                checkpoints.mkdir(exist_ok=True)
+                (checkpoints / f"{len(records):04d}.json").write_text(records[-1].model_dump_json(indent=2), encoding="utf-8")
                 print(
                     f"[{len(records)}/{len(cases) * repetitions}] {case.case_id} "
                     f"r{repetition}: {score.verdict.value}"
                     + (f" ({exception_type})" if exception_type else ""),
                     flush=True,
                 )
+        if local_model is not None and any(record.trace.input_tokens for record in records):
+            import httpx
+            runtime_evidence: dict[str, Any] = {
+                "status": "unavailable",
+                "first_output_scope": "RunLoop execution start to first nonempty public stream delta; not provider-only TTFT",
+            }
+            # Telemetry is read-only and must preserve completed trial evidence
+            # when the owned model exited or was deliberately stopped.
+            endpoint = local_model.running_endpoint()
+            if endpoint is not None:
+                try:
+                    with httpx.Client(base_url=endpoint.api_base.removesuffix("/v1"), trust_env=False, timeout=5) as client:
+                        version = client.get("/api/version")
+                        version.raise_for_status()
+                        loaded = client.get("/api/ps")
+                        loaded.raise_for_status()
+                        runtime_evidence.update({
+                            "ollama_version": version.json().get("version"),
+                            "loaded_models": [{key: item.get(key) for key in ("name", "digest", "size", "size_vram", "context_length", "details")} for item in loaded.json().get("models", [])],
+                            "status": "available",
+                        })
+                except (httpx.HTTPError, ValueError):
+                    runtime_evidence["status"] = "unavailable"
+            identity = replace(identity, runtime_evidence=runtime_evidence)
     finally:
         loop.close()
+        if local_model is not None:
+            local_model.close()
         runtime_metadata_engine.dispose()
     return tuple(records), identity

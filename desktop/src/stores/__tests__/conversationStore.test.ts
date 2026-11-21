@@ -255,6 +255,7 @@ describe("conversationStore admission projection", () => {
     );
     expect(mocks.admit.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
       workspace_context: expect.not.objectContaining({ datasource_id: expect.anything() }),
+      answer_requirements: { evidence: "when_observed" },
     }));
 
     expect(mocks.follow).toHaveBeenCalledWith(
@@ -263,6 +264,31 @@ describe("conversationStore admission projection", () => {
       12,
       expect.any(Object),
     );
+  });
+
+  it("preserves the admitted contract when steering an active Run", async () => {
+    mocks.admit.mockResolvedValue({
+      run_id: "run-1",
+      event_cursor: 12,
+      projection: { ...initialDetail, cursor: 12, items: [], runs: [] },
+    });
+    await useConversationStore.getState().sendMessage(initialDetail.id, "Continue", "steer", "intent-steer");
+    expect(mocks.admit.mock.calls[0]?.[1]).not.toHaveProperty("answer_requirements");
+  });
+
+  it("declares delivery requirements when replacing an active Run", async () => {
+    mocks.admit.mockResolvedValue({
+      run_id: "run-2",
+      event_cursor: 12,
+      projection: { ...initialDetail, cursor: 12, items: [], runs: [] },
+    });
+    await useConversationStore.getState().sendMessage(
+      initialDetail.id,
+      "Start the replacement task",
+      "cancel_and_replace",
+      "intent-replace",
+    );
+    expect(mocks.admit.mock.calls[0]?.[1]).toHaveProperty("answer_requirements", { evidence: "when_observed" });
   });
 
   it("submits a Workbench reference without duplicating its authority", async () => {

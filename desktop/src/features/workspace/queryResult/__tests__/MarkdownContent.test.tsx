@@ -131,6 +131,21 @@ describe("MarkdownContent", () => {
     expect(screen.getByRole("link", { name: "查看证据：成本依据" }).textContent).toContain("2");
   });
 
+  it("renders Runtime-composed structured fragments as rich text with exact evidence actions", () => {
+    const onEvidence = vi.fn();
+    render(<MarkdownContent
+      content={"**验证通过 ✅**。{{cite:artifact_test}}\n\n| 项目 | 结果 |\n|---|---|\n| 测试 | 通过 |\n\n文件已保存。{{cite:artifact_file}}"}
+      citations={[
+        { id: "test-evidence", artifact_id: "artifact_test", label: "**验证通过 ✅**。", locator: { value: { citation_index: 1 } } },
+        { id: "file-evidence", artifact_id: "artifact_file", label: "文件已保存。", locator: { value: { citation_index: 2 } } },
+      ]} onEvidence={onEvidence} />);
+    expect(screen.getByText("验证通过 ✅").tagName).toBe("STRONG");
+    expect(screen.getByRole("table")).toBeTruthy();
+    fireEvent.click(screen.getByRole("link", { name: "查看证据：**验证通过 ✅**。" }));
+    fireEvent.click(screen.getByRole("link", { name: "查看证据：文件已保存。" }));
+    expect(onEvidence.mock.calls).toEqual([["test-evidence"], ["file-evidence"]]);
+  });
+
   it("does not activate invented citations or parse citation examples inside code", () => {
     render(<MarkdownContent content="未知来源。{{cite:artifact_fabricated}}\n\n`{{cite:artifact_known}}`"
       citations={[{ artifact_id: "artifact_known", label: "真实来源" }]} />);

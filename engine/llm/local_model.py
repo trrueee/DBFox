@@ -110,6 +110,13 @@ class ManagedLocalModel:
             extra_body={"think": False},
         )
 
+    def running_endpoint(self) -> ResolvedLlmEndpoint | None:
+        """Observe the owned runtime without starting or restarting a process."""
+        with self._lock:
+            if self._closed or self._process is None or self._process.root_exit_code() is not None:
+                return None
+            return self._endpoint
+
     def endpoint(self) -> ResolvedLlmEndpoint:
         profile = self.require_profile()
         with self._lock:

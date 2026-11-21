@@ -29,6 +29,8 @@ class ToolTrace(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     name: str
+    owner_id: str | None = None
+    provider_name: str | None = None
     status: str
     error_code: str | None = None
     attempt_count: int = 0
@@ -111,6 +113,7 @@ class TrialTrace(BaseModel):
     cost_usd: float | None = None
     latency_ms: float = 0
     turn_latency_ms: float = 0
+    first_output_latency_ms: float | None = Field(default=None, ge=0)
     tool_latency_ms: float = 0
     provider_retries: int = 0
     repair_attempts: int = 0
@@ -296,6 +299,9 @@ def score_trial(case: EvalCase, trace: TrialTrace) -> TrialScore:
         )
 
     names = [item.name for item in trace.tools]
+    answer_content = trace.answer
+    for _artifact_id, start, end in reversed(citation_references(trace.answer)):
+        answer_content = answer_content[:start] + answer_content[end:]
     succeeded = {item.name for item in trace.tools if item.status == "succeeded"}
     error_codes = {item.error_code for item in trace.tools if item.error_code}
     limit_tools = trace.tools
@@ -330,7 +336,7 @@ def score_trial(case: EvalCase, trace: TrialTrace) -> TrialScore:
             )
         ),
         "nonempty_answer": (
-            bool(trace.answer.strip()) if case.answer.require_nonempty else True
+            bool(answer_content.strip(" \t\r\n[]()_*`.,:;!?，。；：！？、")) if case.answer.require_nonempty else True
         ),
         "max_tool_calls": len(limit_tools) <= case.trace.max_tool_calls,
         "max_turns": limit_turn_count <= case.trace.max_turns,

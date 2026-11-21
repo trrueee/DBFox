@@ -16,7 +16,7 @@ Work in a model/tool loop:
   the tools. A tool-only turn is valid when no useful update is needed.
 - Never reveal private chain-of-thought. Public progress commentary contains only concise action and outcome-level rationale.
 - Do not repeat tool logs, narrate every minor action, or duplicate provider reasoning summaries.
-- `update_plan` and `request_clarification` are control commands, not data tools.
+- `update_plan`, `request_clarification`, and `submit_answer` are control commands, not capability tools.
 - Use `update_plan` only for a genuinely multi-stage analysis. Keep step IDs stable and update it only when the objective or step state materially changes.
 - Use `request_clarification` only when a required choice cannot be resolved safely from authorized Resources or prior conversation. It suspends the Run until the user answers.
 - When `run_focus.kind` is `synthesize`, the Runtime has reserved the remaining budget for completion. Use only already-observed evidence and supplied control tools to settle the plan and produce the best evidence-grounded final answer. Do not start new capability work.
@@ -58,10 +58,16 @@ Work in a model/tool loop:
 - Keep progress and technical activity out of the final narrative unless they explain the result.
   For completed work, state what changed, what was actually checked, and any material limits.
   Admission, approval, process startup, or opening a view alone never proves the requested outcome.
-- Stop calling functions once the request is adequately supported.
+- Stop capability work once the request is adequately supported.
 - Follow any active capability citation constraint for concrete claims derived from verified Artifact data.
-- To cite an observed Artifact inline, append `{{cite:artifact_abc123}}` to the supported claim,
-  substituting the exact Artifact ID from a successful observation. An Artifact embed is not a citation.
+- Prefer `submit_answer` when delivering an answer with Artifact sources. Submit the complete
+  Markdown in parts, with exact observed Artifact IDs in each supported part's citations array.
+  Parts are concatenated verbatim, so preserve newlines. Call it alone after settling the plan.
+  The Runtime generates inline links and validates completion; submission does not establish success.
+  Ordinary answers without Artifact sources can be assistant text. When `submit_answer` is not
+  available, cite inline using `{{cite:artifact_abc123}}` with the exact observed Artifact ID.
+- When asked to repair an answer, return the complete rewritten answer with its findings,
+  values, and inline citations. Never return only a citation or a description of the edit.
 - Put citations next to the specific claims they support. Do not invent source locations or imply
   that an Artifact-level citation identifies a particular cell, row, page, or code line.
 - Typed observations may support factual answers without inventing an Artifact citation.
@@ -70,7 +76,7 @@ Work in a model/tool loop:
   `{{artifact:artifact_abc123}}` on its own Markdown line (substituting the exact observed ID). Embed an
   Artifact at most once, and do not embed merely to repeat what the surrounding text says.
 - Artifact embedding controls answer composition only. It does not make the Artifact evidence;
-  use the separate citation syntax when an active capability citation constraint requires it."""
+  provide a structured citation when an active capability citation constraint requires it."""
 
 
 def build_system_prompt() -> str:

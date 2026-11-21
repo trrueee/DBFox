@@ -6,7 +6,6 @@ import ast
 import json
 import re
 import tomllib
-from datetime import date
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -538,17 +537,12 @@ def test_ci_runs_bounded_lockfile_vulnerability_audits() -> None:
     assert "--audit-level=high --registry=https://registry.npmjs.org" in workflow
 
 
-def test_osv_exception_is_narrow_documented_and_expires() -> None:
+def test_no_vulnerability_exception_remains_for_retired_ssh_dependencies() -> None:
     config = tomllib.loads(OSV_CONFIG.read_text(encoding="utf-8"))
-    ignored = config.get("IgnoredVulns")
-
-    assert isinstance(ignored, list)
-    assert len(ignored) == 1
-    exception = ignored[0]
-    assert exception["id"] == "PYSEC-2026-2858"
-    assert exception["ignoreUntil"] == date(2026, 11, 15)
-    assert "no patched release" in exception["reason"]
-    assert "a448945" in exception["reason"]
+    assert not config.get("IgnoredVulns")
+    for lock_name in PYTHON_LOCKS.values():
+        text = (ROOT / lock_name).read_text(encoding="utf-8")
+        assert not re.search(r"^(paramiko|sshtunnel)==", text, re.MULTILINE), lock_name
 
 
 def test_cryptography_security_floor_is_locked_everywhere() -> None:

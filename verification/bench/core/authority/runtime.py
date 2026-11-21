@@ -83,6 +83,13 @@ def _run_case(
         SYNTHETIC_RESOURCE_KIND,
         lambda ref: {"id": ref.id, "value": f"value:{ref.id}"},
     ).freeze()
+    from engine.agent.resource_refs import ProjectResourceDescriptor
+
+    def resource_provider(_db, _project_id):
+        return tuple(ProjectResourceDescriptor(
+            kind=ref.kind, id=ref.id, version=ref.version, name=f"Fixture {ref.id}",
+        ) for ref in refs)
+
     loop = RunLoop(
         session_factory=session_factory,
         model_factory=model_factory,
@@ -92,6 +99,7 @@ def _run_case(
         definition=AgentDefinition(allowed_tool_groups=("verification",)),
         live_stream=LiveStreamHub(),
         resource_resolver=resolver,
+        resource_providers=(resource_provider,),
     )
     try:
         loop.execute(lease=lease, run_id=admission.run_id)
@@ -141,6 +149,7 @@ def _run_case(
             evidence={
                 "run_status": str(run.status) if run is not None else "missing",
                 "invocation_status": str(invocation.status) if invocation is not None else "missing",
+                "invocation_error_code": invocation.error_code if invocation is not None else None,
                 "authorized_ids": case.authorized_ids,
                 "access_log": tuple(access_log),
             },

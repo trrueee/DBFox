@@ -26,13 +26,16 @@ def register_core_functions(registry: ToolRegistry) -> None:
 
     from engine.tools.builtin.control import (
         RequestClarificationCommand,
+        SubmitAnswerCommand,
         UpdatePlanCommand,
     )
 
     clarification = RequestClarificationCommand()
     update_plan = UpdatePlanCommand()
+    submit_answer = SubmitAnswerCommand()
     registry.register(clarification, owner=CORE_OWNER, provider_name=clarification.name)
     registry.register(update_plan, owner=CORE_OWNER, provider_name=update_plan.name)
+    registry.register(submit_answer, owner=CORE_OWNER, provider_name=submit_answer.name)
 
 
 def register_conversation_functions(registry: ToolRegistry) -> None:

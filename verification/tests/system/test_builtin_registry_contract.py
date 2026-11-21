@@ -46,7 +46,7 @@ class _EchoTool(BaseTool[_EchoInput, _EchoOutput]):
 
 
 FROZEN_MATERIALIZATION_HASH = (
-    "2b6e8f7365e005f490bd45917a086317e4525e2012e3c8be727e460dc4779100"
+    "9ddf75d3398c57a1c3b66a8611e355a07372255b0c1dfa28655108a2676a3354"
 )
 
 FROZEN_BUILTIN_NAMES = (
@@ -54,11 +54,13 @@ FROZEN_BUILTIN_NAMES = (
     "conversation_search",
     "project_resource_search",
     "request_clarification",
+    "submit_answer",
     "update_plan",
 )
 
 FROZEN_OWNERS = {
     "request_clarification": "dbfox.core",
+    "submit_answer": "dbfox.core",
     "update_plan": "dbfox.core",
     "project_resource_search": "dbfox.core",
     "conversation_read": "dbfox.conversation",

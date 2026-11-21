@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from engine.agent.answer_submission import AnswerSubmission
 from engine.json_codec import JsonCodecError, loads
 
 
@@ -101,10 +102,16 @@ class ModelTurnResult(BaseModel):
     usage: dict[str, int] = Field(default_factory=dict)
     termination: TurnTermination | None = None
 
+    # Set only from a successfully settled Runtime control Invocation. Native
+    # provider output items remain intact in the Turn; this is a completion view.
+    submitted_answer: AnswerSubmission | None = None
+
     @property
     def display_text(self) -> str:
         """Ordered assistant text, before completion eligibility is applied."""
 
+        if self.submitted_answer is not None:
+            return self.submitted_answer.text
         return "\n\n".join(
             message.text.strip()
             for message in self.messages
@@ -131,16 +138,21 @@ class ModelTurnResult(BaseModel):
 
     @property
     def answer_text(self) -> str:
+        if self.submitted_answer is not None:
+            if self.termination is TurnTermination.COMPLETED and not self.tool_calls:
+                return self.submitted_answer.text
+            return ""
         return "\n\n".join(
             message.text.strip() for message in self.completed_answer_messages
         )
 
     @property
     def has_completed_answer_candidate(self) -> bool:
-        """Whether this settled Turn contains displayable terminal assistant text.
+        """Whether settled native text or a Runtime submission is a candidate.
 
         ``phase`` is an optional provider hint.  It never overrides the Turn's
-        terminal state.  Tool calls always keep the Turn non-terminal.
+        terminal state. Pending tool calls keep the Turn non-terminal; a
+        submission view is read only after its control Invocation has settled.
         """
 
         return bool(self.answer_text)

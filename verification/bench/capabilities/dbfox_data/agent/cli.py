@@ -46,7 +46,7 @@ def _stamp() -> str:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m verification.bench data-agent")
+    parser = argparse.ArgumentParser(prog="python -m verification.bench.capabilities.dbfox_data.agent.cli")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     validate = subparsers.add_parser("validate", help="strictly validate a dataset")
@@ -67,6 +67,8 @@ def _parser() -> argparse.ArgumentParser:
     real.add_argument("--tag", action="append", default=[])
     real.add_argument("--case", action="append", default=[])
     real.add_argument("--repetitions", type=int, default=3)
+    real.add_argument("--local-model-profile", type=Path, help="Use only this existing managed local model; never resolves cloud credentials")
+    real.add_argument("--keep-runtime", action="store_true", help="Keep isolated synthetic data and durable Run/Artifact evidence for inspection")
     real.add_argument(
         "--output",
         type=Path,
@@ -164,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
             cases=cases,
             repetitions=args.repetitions,
             work_dir=work_dir,
+            local_model_profile=args.local_model_profile,
         )
     except EvaluationConfigurationError as exc:
         print(f"AGENTBENCH_NOT_CONFIGURED: {exc}", file=sys.stderr)
@@ -175,11 +178,14 @@ def main(argv: list[str] | None = None) -> int:
         environment={
             **environment_evidence(model=identity.model, api_base=identity.api_base),
             "credential_reference": identity.credential_reference,
+            "model_digest": identity.model_digest,
+            "context_length": identity.context_length,
+            "local_runtime": identity.runtime_evidence,
         },
     )
     resolved_work = work_dir.resolve()
     resolved_parent = args.output.parent.resolve()
-    if resolved_work.parent == resolved_parent and resolved_work.name.startswith("."):
+    if not args.keep_runtime and resolved_work.parent == resolved_parent and resolved_work.name.startswith("."):
         shutil.rmtree(resolved_work)
     print(f"REPORT={args.output / 'report.md'}")
     return (

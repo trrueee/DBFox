@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import UTC, datetime
+from importlib.metadata import EntryPoint
 import json
 from pathlib import Path
 import sys
@@ -37,6 +38,8 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     run.add_argument("--repetitions", type=int, default=1)
     run.add_argument("--dataset", type=Path)
     run.add_argument("--output", type=Path)
+    run.add_argument("--local-model-profile", type=Path, help="Existing managed local profile for the Data Agent suite")
+    run.add_argument("--keep-runtime", action="store_true", help="Keep the Data Agent suite's isolated synthetic runtime and evidence")
 
     calibrate = commands.add_parser("calibrate", help="calibrate a suite-owned scorer")
     calibrate.add_argument("suite", choices=["capability.dbfox_data.agent"])
@@ -75,6 +78,10 @@ def _run_data_cli(command: str, args: argparse.Namespace) -> int:
         for case_id in args.case:
             forwarded.extend(["--case", case_id])
         forwarded.extend(["--repetitions", str(args.repetitions)])
+        if args.local_model_profile is not None:
+            forwarded.extend(["--local-model-profile", str(args.local_model_profile)])
+        if args.keep_runtime:
+            forwarded.append("--keep-runtime")
     elif command == "calibrate" and args.fixtures:
         forwarded.extend(["--suite", str(args.fixtures)])
     elif command == "replay":
@@ -114,17 +121,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "replay":
         return _run_data_cli("replay", args)
     registration = SUITES[args.suite]
+    if registration.delegated_cli != "data-agent" and (args.local_model_profile is not None or args.keep_runtime):
+        raise SystemExit("Local profile and retained runtime options currently apply to capability.dbfox_data.agent.")
     if registration.delegated_cli == "data-agent":
         if args.output is None:
             args.output = ROOT / "output" / "agent-evaluation" / f"data-agent-{_stamp()}"
         return _run_data_cli("real", args)
-    if registration.runner is None:
+    if registration.runner_entry_point is None:
         raise RuntimeError(f"Suite {args.suite} has no executable runner")
     if args.dataset is not None or args.tag:
         raise ValueError("--dataset and --tag are only supported by the Data Agent suite")
     slug = args.suite.replace(".", "-")
     output = args.output or ROOT / "output" / "agent-evaluation" / f"{slug}-{_stamp()}"
-    summary = registration.runner(
+    # Loading a selected execution owner is the boundary at which product
+    # modules may be imported. Catalog discovery must not bind engine.db.
+    runner = EntryPoint(name=args.suite, value=registration.runner_entry_point, group="dbfox.bench").load()
+    summary = runner(
         output_dir=output,
         repetitions=args.repetitions,
         case_ids=frozenset(args.case),

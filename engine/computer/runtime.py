@@ -199,23 +199,29 @@ class ComputerRuntime:
                 if isinstance(action, str):
                     if grant.target.kind != "browser":
                         raise ComputerError("COMPUTER_BROWSER_REQUIRED", "导航只能用于明确共享的受控浏览器。", 400)
-                    perform = self.browser.navigate(grant, action, check)
+                    prepared = self.browser.navigate(grant, action, check)
                 else:
                     self.require_latest(ref, before)
                     assert before is not None
-                    perform = driver.prepare(grant, before, action, check)
+                    prepared = driver.prepare(grant, before, action, check)
                 check()
                 # A pending stop sets the Event before contending for this short
                 # SQLite lease. It cannot queue a new input behind a long read.
-                with self.store.effect_lease(session_id, ref, lambda: event.is_set() or is_cancelled()):
-                    check()
-                    self._latest.pop(ref.id, None)
+                try:
                     try:
-                        perform()
-                    except ComputerError:
-                        raise
-                    except Exception:
-                        raise ComputerError("COMPUTER_OUTCOME_UNKNOWN", "操作结果未知。请重新观察，不要直接重复发送。") from None
+                        with self.store.effect_lease(session_id, ref, lambda: event.is_set() or is_cancelled()):
+                            check()
+                            self._latest.pop(ref.id, None)
+                            prepared.dispatch()
+                    finally:
+                        # Always consume a submitted action, even if committing
+                        # the fence fails. No second dispatch or retry occurs.
+                        if prepared.wait is not None:
+                            prepared.wait()
+                except ComputerError:
+                    raise
+                except Exception:
+                    raise ComputerError("COMPUTER_OUTCOME_UNKNOWN", "操作结果未知。请重新观察，不要直接重复发送。") from None
             self._call(execute, timeout=12, cancel=event)
 
     def require_latest(self, ref: ResourceScopeRef, before: Observation | None) -> None:

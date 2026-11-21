@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-08-06
+> 最后核验：2026-11-21
 >
 > 适用范围：Provider 响应项、Agent 运行项、SSE 事件和前端投影
 
@@ -67,7 +67,16 @@ Assistant `message.phase` 是 Provider 提供的可选提示；非空时只允�
 
 耐久输出 Item 的 `output` 是可恢复的 JSON 摘要，`summary` 是用户可读摘要，较大结果通过 `artifact_refs` 引用。数据工具还可以为当前 Run 生成一个有硬上限的瞬时观察窗口；Prompt 组装时以相同 `call_id` 将它回传给模型，但不得把行值写入 Observation、Artifact、Turn snapshot 或 Session Memory。进程恢复后模型通过 Artifact ID 和 `result_inspect` 重新读取所需页。完整边界见 [Agent Tool、Context 与 Memory 边界合同](./agent-tool-context-memory-contract.md)。工具不得绕过 Registry、Policy、审批、超时、幂等和 Contract 指纹。SQL 执行必须引用已验证的 SQL Artifact，不接受新的裸 SQL。
 
-`request_clarification` 与 `update_plan` 是 Runtime Control Command：它们分别写 Question 和 Plan 状态，不伪装成普通数据库工具。
+`request_clarification`、`update_plan` 与 `submit_answer` 是 Runtime Control Command：前两者
+分别写 Question 和 Plan；后者通过原生函数参数提交 Markdown 片段和对应来源，只接收
+候选，不直接批准完成。它必须独立调用，成功结算后仍经过原有完成约束和终态事务。
+详见[结构化答案提交](./agent-context-continuity.md#结构化答案提交agent-44--prompt-51)。
+
+Conversation Input 可以附带 `answer_requirements`。当前 `evidence=when_observed|required`
+要求结构化来源交付，规范值随原有 Run 准入事实保存；不是审批、执行权限或新的 RunItem。
+桌面只在新建/替换任务时设置，steer / respond 继承当前合同。模型、工具输出和计划不能
+修改该合同。完成判断与最终事务分别检查，缺失时不能通过预算耗尽或部分摘要绕开。
+详见[输入准入时冻结的答案要求](./agent-context-continuity.md#输入准入时冻结的答案要求agent-45--prompt-52)。
 
 ## 4. 耐久事件与实时增量
 
@@ -102,9 +111,10 @@ Conversation snapshot 返回 protocol version、Runs、RunItems、游标和分�
 ## 6. 终态与不变量
 
 - 一个 Session 同时最多有一个活跃 Run；Coordinator 只负责进程内执行租约和唤醒，不是持久状态源。
-- 一个模型响应可以产生 commentary、零个或多个 function calls；存在工具调用时，工具结果加入下一轮上下文后继续循环。
+- 一个模型响应可以产生 commentary、零个或多个 function calls；能力调用结算后继续循环。
+  唯一成功结算的 `submit_answer` 可以在同一循环提交完成候选，不能跳过完成约束。
 - Turn 的 provider-neutral 终止值是封闭枚举 `completed | incomplete | failed | cancelled`；必须恰好收到一次末尾终止事件，只有 `completed` 能进入完成判断。
-- 没有工具调用或继续控制信号，并且存在符合上文规则的最终回答候选时，Run 才进入成功终态；`phase` 不是所有 Provider 的必需能力。
+- 没有未结算工具或继续控制信号，且最终文本或结构化提交候选通过完成约束时，Run 才进入成功终态；`phase` 不是所有 Provider 的必需能力。
 - Approval、Question、取消、失败和 lease loss 均先持久化，再向前端发布对应事件。
 - 同一职责只有一个公开合同：不存在 `answer.completed`、`activity.updated`、旧 tool 名称映射或第二套自定义聊天消息协议。
 
