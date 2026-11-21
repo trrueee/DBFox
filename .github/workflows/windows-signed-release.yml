@@ -81,7 +81,7 @@ jobs:
             requirements-dev.lock
 
       # v8.1.0
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
         with:
           version: ${{ env.UV_VERSION }}
 
