@@ -160,7 +160,7 @@ def _relevant_tool_groups(
 
 
 LIVE_STREAM_HUB = LiveStreamHub()
-_FINALIZATION_TOOL_NAMES = frozenset({"update_plan"})
+_FINALIZATION_TOOL_NAMES = frozenset({"update_plan", "submit_answer"})
 
 
 def build_remote_model_adapter(settings: ProviderSettings) -> ModelAdapter:
@@ -316,15 +316,20 @@ class RunLoop:
                         state=state,
                     ):
                         return
-                    if self._stop_if_stalled(
-                        lease,
-                        run_id,
-                        state.answer_result,
-                        state=state,
-                        turn_count=turn_count,
-                    ):
-                        return
-                    continue
+                    with self.session_factory() as db:
+                        submitted = RunRepository(db).submitted_answer_for_turn(run_id, prepared.turn_id)
+                    if submitted is None:
+                        if self._stop_if_stalled(
+                            lease,
+                            run_id,
+                            state.answer_result,
+                            state=state,
+                            turn_count=turn_count,
+                        ):
+                            return
+                        continue
+                    result = submitted
+                    state.record_result(result)
 
                 decision = self.completion.evaluate(
                     context=prepared.context,
@@ -333,7 +338,9 @@ class RunLoop:
                     max_turns=self.definition.limits.max_turns,
                 )
                 if decision.kind in {CompletionKind.CONTINUE, CompletionKind.REPAIR}:
-                    self._record_continuation(lease, run_id, decision)
+                    self._record_continuation(
+                        lease, run_id, decision, finalizing=state.finalizing,
+                    )
                     if self._stop_if_stalled(
                         lease,
                         run_id,
@@ -832,13 +839,15 @@ class RunLoop:
         lease: SessionLease,
         run_id: str,
         decision: CompletionDecision,
+        *,
+        finalizing: bool,
     ) -> None:
         with self.session_factory() as db:
             repository = RunRepository(db)
             repository.record_focus(
                 lease=lease,
                 run_id=run_id,
-                kind=decision.kind.value,
+                kind="synthesize" if finalizing else decision.kind.value,
                 reason=decision.reason,
                 missing=decision.missing,
             )
@@ -1010,23 +1019,21 @@ class RunLoop:
         *,
         turns_remaining: int,
         reason: str,
+        missing: list[str] | None = None,
     ) -> None:
         if state.finalizing:
             return
-        tools_remaining = max(
-            0,
-            self.definition.limits.max_tool_invocations - state.tool_count,
-        )
         with self.session_factory() as db:
             RunRepository(db).record_focus(
                 lease=lease,
                 run_id=run_id,
                 kind="synthesize",
                 reason=(
-                    f"{reason} Remaining Turn budget: {max(0, turns_remaining)}; "
-                    f"remaining data-tool budget: {tools_remaining}."
+                    f"{reason} Remaining Turn budget: {max(0, turns_remaining)}. "
+                    "Synthesize the existing observations into the complete answer. "
+                    "New capability work is unavailable during finalization."
                 ),
-                missing=["settled_plan", "inline_evidence", "final_answer"],
+                missing=list(dict.fromkeys([*(missing or []), "final_answer"])),
             )
             db.commit()
         state.finalizing = True
@@ -1066,7 +1073,7 @@ class RunLoop:
             db.commit()
         if not reached_limit:
             return False
-        if decision.kind is CompletionKind.PARTIAL:
+        if decision.kind in {CompletionKind.PARTIAL, CompletionKind.REPAIR}:
             if not state.finalizing and turn_count < self.definition.limits.max_turns:
                 self._activate_finalization(
                     lease,
@@ -1075,10 +1082,13 @@ class RunLoop:
                     turns_remaining=(self.definition.limits.max_turns - turn_count),
                     reason=(
                         "The Run stopped making progress. Use the remaining budget "
-                        "once to synthesize the durable work already completed."
+                        "once to synthesize the durable work already completed. "
+                        + decision.reason
                     ),
+                    missing=decision.missing,
                 )
                 return False
+        if decision.kind is CompletionKind.PARTIAL:
             return self._complete(
                 lease,
                 run_id,

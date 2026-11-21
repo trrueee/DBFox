@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy.orm import sessionmaker
 
 from engine.computer.contracts import ActInput, ComputerError, Rect, ShareInput, TargetIdentity
-from engine.computer.drivers import CapturedFrame
+from engine.computer.drivers import CapturedFrame, PreparedAction
 from engine.computer.native import NativeDesktop
 from engine.computer.runtime import ComputerRuntime
 from engine.models import AgentSession, Project
@@ -34,7 +34,7 @@ def test_stop_wins_against_a_delayed_input_preflight(tmp_path: Path) -> None:
         def prepare(self, grant, before, action, check_cancelled):
             entered.set()
             assert release.wait(5)
-            return lambda: dispatched.append("late input")
+            return PreparedAction(lambda: dispatched.append("late input"))
 
     metadata = create_migrated_metadata_engine(tmp_path / "computer.sqlite")
     sessions = sessionmaker(bind=metadata)

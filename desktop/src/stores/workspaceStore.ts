@@ -64,7 +64,7 @@ interface WorkspaceActions {
   removeWorkbenchReference: (reference: WorkbenchReference) => void;
   clearWorkbenchReferences: (workbenchKey?: string) => void;
   ensureActiveWorkbenchScope: () => string;
-  setDraftConversationId: (conversationId: string) => void;
+  setDraftConversationId: (conversationId: string, workbenchKey?: string) => void;
 }
 
 export type WorkspaceStore = WorkspaceState & WorkspaceActions;
@@ -312,8 +312,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()(persist((set, get) => 
       references: [],
     }), workbenchKey)),
 
-  setDraftConversationId: (draftConversationId) =>
-    set((state) => updateActiveWorkbench(state, (workbench) => ({ ...workbench, draftConversationId }))),
+  setDraftConversationId: (draftConversationId, workbenchKey) =>
+    set((state) => updateActiveWorkbench(state, (workbench) => ({ ...workbench, draftConversationId }), workbenchKey)),
 
   ensureActiveWorkbenchScope: () => {
     const state = get();

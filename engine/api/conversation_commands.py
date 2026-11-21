@@ -253,7 +253,9 @@ def admit_conversation_input(
 
     local_model: ManagedLocalModel | None = getattr(request.app.state, "local_model", None)
     try:
-        llm_payload = {"content": payload.content, "delivery_mode": payload.delivery_mode.value}
+        llm_payload: dict[str, object] = {"content": payload.content, "delivery_mode": payload.delivery_mode.value}
+        if payload.answer_requirements is not None:
+            llm_payload["answer_requirements"] = payload.answer_requirements.model_dump(mode="json")
         if local_model is not None and local_model.configured:
             profile = local_model.require_profile()
             credential_id = None

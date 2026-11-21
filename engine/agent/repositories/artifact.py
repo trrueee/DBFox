@@ -593,13 +593,47 @@ class ArtifactRepository:
     def referenced_artifacts_for_run(self, run_id: str) -> list[Artifact]:
         """Return prior Artifacts explicitly observed by this Run."""
 
+        return [artifact for artifact in self.observed_artifacts_for_run(run_id) if artifact.run_id != run_id]
+
+    def observed_artifacts_for_run(self, run_id: str) -> list[Artifact]:
+        """Resolve successful observations through the existing Artifact access fence."""
+
         current_run = self.session.get(AgentRun, run_id)
         if current_run is None:
             return []
+        artifacts: list[Artifact] = []
+        for artifact_id in self._observed_artifact_ids(run_id):
+            artifact = self.available_artifact(
+                current_run_id=run_id, artifact_id=artifact_id,
+                session_id=str(current_run.session_id),
+            )
+            if artifact is not None:
+                artifacts.append(artifact)
+        return artifacts
+
+    def has_observed_public_artifacts(self, run_id: str) -> bool:
+        """Observation is a historical fact even if access is later revoked."""
+        current_run = self.session.get(AgentRun, run_id)
+        if current_run is None:
+            return False
+        ids = self._observed_artifact_ids(run_id)
+        if not ids:
+            return False
+        rows = self.session.scalars(select(AgentArtifactRecord).where(
+            AgentArtifactRecord.id.in_(ids),
+            AgentArtifactRecord.session_id == current_run.session_id,
+            AgentArtifactRecord.status == ArtifactStatus.COMPLETED.value,
+        ))
+        return any(self._domain(row).visibility is not ArtifactVisibility.INTERNAL for row in rows)
+
+    def _observed_artifact_ids(self, run_id: str) -> list[str]:
         referenced_ids: list[str] = []
         rows = self.session.execute(
             select(AgentObservationRecord.artifact_ids_json)
-            .where(AgentObservationRecord.run_id == run_id)
+            .where(
+                AgentObservationRecord.run_id == run_id,
+                AgentObservationRecord.status == "succeeded",
+            )
             .order_by(AgentObservationRecord.sequence)
         ).scalars()
         for encoded in rows:
@@ -610,16 +644,7 @@ class ArtifactRepository:
                 artifact_id = str(value).strip()
                 if artifact_id and artifact_id not in referenced_ids:
                     referenced_ids.append(artifact_id)
-        artifacts: list[Artifact] = []
-        for artifact_id in referenced_ids:
-            artifact = self.available_artifact(
-                current_run_id=run_id,
-                artifact_id=artifact_id,
-                session_id=str(current_run.session_id),
-            )
-            if artifact is not None and artifact.run_id != run_id:
-                artifacts.append(artifact)
-        return artifacts
+        return referenced_ids
 
     @staticmethod
     def _domain(row: AgentArtifactRecord) -> Artifact:

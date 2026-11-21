@@ -2,11 +2,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Callable
 from io import BytesIO
 
 from PIL import Image
 
 from engine.computer.contracts import BrowserTab, ComputerError, ComputerNode, MAX_IMAGE_BYTES, Rect
+
+
+@dataclass(frozen=True)
+class PreparedAction:
+    """Submit an authorized effect, then await its outcome outside the fence.
+
+    Native input is synchronous and needs no separate wait. Browser submission
+    starts its actual coroutine eagerly; network/actionability waits remain on
+    the owning worker without occupying the metadata writer.
+    """
+
+    dispatch: Callable[[], None]
+    wait: Callable[[], None] | None = None
 
 
 @dataclass(frozen=True)

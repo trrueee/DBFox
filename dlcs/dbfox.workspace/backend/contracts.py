@@ -96,9 +96,18 @@ class FileWriteInput(Contract):
 
 class FileEditInput(Contract):
     path: str = Field(min_length=1, max_length=1024, description=_FILE_PATH)
-    old_string: str = Field(min_length=1, max_length=200_000)
-    new_string: str = Field(max_length=200_000)
-    expected_sha256: str = Field(min_length=64, max_length=64)
+    old_string: str = Field(
+        min_length=1, max_length=200_000,
+        description="Exact text to replace, unique unless replace_all is true. LF/CRLF are equivalent only in files with one consistent LF or CRLF convention; whitespace and literal escape sequences are never repaired.",
+    )
+    new_string: str = Field(
+        max_length=200_000,
+        description="Replacement text. Newlines follow a consistently LF/CRLF document; mixed or CR-only files use the text exactly as supplied. Untouched bytes are preserved.",
+    )
+    expected_sha256: str = Field(
+        min_length=64, max_length=64,
+        description="The current raw-byte sha256 returned by file_read; an external edit makes this operation fail without changes.",
+    )
     replace_all: bool = False
 
 

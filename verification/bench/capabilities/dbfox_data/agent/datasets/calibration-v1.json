@@ -12,7 +12,7 @@
         "prompts": ["fixture"],
         "answer": {"required_numbers": [3]},
         "result": {"golden_sql": "SELECT 3 AS total"},
-        "trace": {"required_tool_subsequence": ["sql_validate", "sql_execute_readonly"], "required_artifacts": ["result_view"]}
+        "trace": {"required_tool_subsequence": ["sql_validate", "sql_execute_readonly"], "required_artifacts": ["dbfox.data.result_view"]}
       },
       "trace": {
         "terminal_status": "completed",
@@ -21,7 +21,7 @@
           {"name": "sql_validate", "status": "succeeded"},
           {"name": "sql_execute_readonly", "status": "succeeded"}
         ],
-        "artifact_types": ["sql", "result_view"],
+        "artifact_types": ["dbfox.data.sql", "dbfox.data.result_view"],
         "artifact_ids": ["artifact_result_1"],
         "turn_count": 3,
         "generated_result": {"columns": ["total"], "rows": [[3]]},

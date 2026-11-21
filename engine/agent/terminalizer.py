@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.agent.artifact import ArtifactSelectionSuggestion, ArtifactVisibility
+from engine.agent.answer_requirements import AnswerRequirements
 from engine.agent.artifact_embed import (
     MAX_ARTIFACT_EMBEDS,
     artifact_embed_ids,
@@ -30,6 +31,7 @@ from engine.agent.repositories.plan import PlanRepository
 from engine.agent.repositories.question import QuestionRepository
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
+from engine.agent.repositories.write_transaction import begin_agent_write
 from engine.agent.resource_refs import RunResourceDiscovery
 from engine.agent.response import (
     AnswerCandidate,
@@ -42,7 +44,7 @@ from engine.agent.plan import PlanStatus
 from engine.agent.session import SessionLease
 from engine.agent.turn import ModelTurnResult
 from engine.app.safe_errors import fixed_error_detail
-from engine.json_codec import load_array
+from engine.json_codec import load_array, load_object
 from engine.models import AgentTaskPlanRecord
 
 
@@ -130,18 +132,23 @@ class Terminalizer:
                 raise ValueError(
                     "Evidence Artifact IDs must be cited inline by the terminal answer"
                 )
-            text = CITATION_PATTERN.sub(
-                lambda match: match.group(0) if match.group(1) in result_by_id else "",
-                text,
+            for artifact_id, _, _ in references:
+                available = artifact_repository.available_artifact(
+                    session_id=lease.session_id, current_run_id=run_id, artifact_id=artifact_id,
+                )
+                if artifact_id not in result_by_id or available is None:
+                    raise ValueError("Terminal answer cites an unavailable Artifact ID")
+            submitted_claims = (
+                result.submitted_answer.citation_claims if result.submitted_answer is not None else None
             )
-            references = citation_references(text)
             evidence = []
             for citation_index, (artifact_id, start, end) in enumerate(
                 references, start=1
             ):
                 item = result_by_id[artifact_id]
                 claim = str(
-                    _claim_text_for_citation(text, start, end)
+                    (submitted_claims[citation_index - 1] if submitted_claims is not None
+                     else _claim_text_for_citation(text, start, end))
                     or item.summary
                     or item.title
                 ).strip()
@@ -201,7 +208,7 @@ class Terminalizer:
                 lease,
                 response,
                 terminal_turn_id=(
-                    result.turn_id if result.completed_answer_messages else None
+                    result.turn_id if result.has_completed_answer_candidate else None
                 ),
                 terminal_output_index=(
                     result.completed_answer_messages[-1].output_index
@@ -220,6 +227,7 @@ class Terminalizer:
                         for item in evidence
                     ]
                 },
+                resource_discovery=self.resource_discovery,
             )
             db.commit()
             return completed
@@ -234,6 +242,7 @@ class Terminalizer:
         terminal_output_index: int | None = None,
         plan_status: PlanStatus = PlanStatus.COMPLETED,
         memory_delta: dict[str, Any] | None = None,
+        resource_discovery: RunResourceDiscovery | None = None,
     ) -> bool:
         """Atomically settle the Plan and persist the canonical terminal response."""
 
@@ -241,10 +250,40 @@ class Terminalizer:
             raise ValueError(
                 "Successful Run terminalization requires a completed or partial Plan"
             )
+        begin_agent_write(db)
         runs = RunRepository(db)
+        if runs.cancellation_requested(lease=lease, run_id=response.run_id):
+            # The caller's existing cancellation checkpoint owns settlement.
+            # Do not complete a Plan or turn the cancel race into an exception.
+            return False
         if runs.has_pending_steering_inputs(lease=lease, run_id=response.run_id):
             return False
-        PlanRepository(db).terminalize(
+        requirements_payload = load_object(str(runs.get(response.run_id).request_json or "{}")).get("answer_requirements")
+        if requirements_payload is not None:
+            requirements = AnswerRequirements.model_validate(requirements_payload)
+            source_repository = ArtifactRepository(db, resource_discovery=resource_discovery)
+            source_ids = [
+                artifact.id for artifact in source_repository.observed_artifacts_for_run(response.run_id)
+                if artifact.visibility is not ArtifactVisibility.INTERNAL
+            ]
+            submitted = runs.submitted_answer_for_turn(response.run_id, terminal_turn_id) if terminal_turn_id else None
+            if not requirements.is_satisfied(
+                submitted_artifact_ids=(
+                    submitted.submitted_answer.cited_artifact_ids.intersection(
+                        evidence.artifact_id for evidence in response.answer.evidence
+                    ) if submitted is not None and submitted.submitted_answer is not None else None
+                ),
+                citable_artifact_ids=source_ids,
+                has_observed_public_artifacts=source_repository.has_observed_public_artifacts(response.run_id),
+            ):
+                return False
+            if submitted is not None and submitted.answer_text != response.answer.text:
+                return False
+        plans = PlanRepository(db)
+        current_plan = plans.current(response.run_id)
+        if plan_status is PlanStatus.COMPLETED and current_plan is not None and not current_plan.is_settled:
+            return False
+        plans.terminalize(
             lease=lease,
             run_id=response.run_id,
             status=plan_status,

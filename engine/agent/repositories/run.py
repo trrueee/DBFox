@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.agent.events import RuntimeEventType
+from engine.agent.answer_submission import AnswerSubmission
 from engine.agent.repositories.evidence import EvidenceRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
@@ -27,7 +28,7 @@ from engine.agent.run_item import (
 )
 from engine.agent.session import DeliveryMode, SessionInputStatus, SessionLease
 from engine.agent.turn import ModelTurnResult, TurnAssistantMessage, TurnTermination
-from engine.json_codec import JsonCodecError, canonical_dumps as _json, loads
+from engine.json_codec import JsonCodecError, canonical_dumps as _json, load_array, load_object, loads
 from engine.models import (
     AgentApproval,
     AgentMessage,
@@ -37,6 +38,7 @@ from engine.models import (
     AgentSessionInput,
     AgentSessionMemory,
     AgentTurn,
+    AgentToolInvocation,
     AgentRunItemRecord,
 )
 from engine.security.audit import SecurityAuditService
@@ -510,6 +512,35 @@ class RunRepository:
         self.session.flush()
         return item_id
 
+    def submitted_answer_for_turn(self, run_id: str, turn_id: str) -> ModelTurnResult | None:
+        """Read a settled Core submission; never reinterpret a provider call as success."""
+        turn = self.session.get(AgentTurn, turn_id)
+        if (
+            turn is None or str(turn.run_id) != run_id or turn.status != "completed"
+            or turn.error_code is not None or turn.termination != TurnTermination.COMPLETED.value
+        ):
+            return None
+        calls = load_array(str(turn.tool_calls_json or "[]"))
+        if len(calls) != 1 or not isinstance(calls[0], dict) or calls[0].get("name") != "submit_answer":
+            return None
+        invocation = self.session.execute(select(AgentToolInvocation).where(
+            AgentToolInvocation.run_id == run_id,
+            AgentToolInvocation.turn_id == turn_id,
+            AgentToolInvocation.provider_call_id == calls[0].get("id"),
+            AgentToolInvocation.tool_name == "submit_answer",
+            AgentToolInvocation.owner_id == "dbfox.core",
+            AgentToolInvocation.status == "succeeded",
+        )).scalar_one_or_none()
+        if invocation is None:
+            return None
+        # The Invocation input is the sole durable candidate source. Do not
+        # create a synthetic provider message or another answer store.
+        return ModelTurnResult(
+            turn_id=turn_id,
+            submitted_answer=AnswerSubmission.model_validate(load_object(str(invocation.input_json))),
+            termination=TurnTermination.COMPLETED,
+        )
+
     def latest_completed_answer(self, run_id: str) -> ModelTurnResult:
         """Restore the latest eligible answer from canonical Turn and RunItem state."""
 
@@ -525,6 +556,20 @@ class RunRepository:
             .order_by(AgentTurn.sequence.desc())
             .limit(1)
         ).scalar_one_or_none()
+        submission_turn = self.session.execute(
+            select(AgentTurn).join(AgentToolInvocation, AgentToolInvocation.turn_id == AgentTurn.id)
+            .where(
+                AgentTurn.run_id == run_id,
+                AgentTurn.status == "completed",
+                AgentToolInvocation.owner_id == "dbfox.core",
+                AgentToolInvocation.tool_name == "submit_answer",
+                AgentToolInvocation.status == "succeeded",
+            ).order_by(AgentTurn.sequence.desc()).limit(1)
+        ).scalar_one_or_none()
+        if submission_turn is not None and (turn is None or submission_turn.sequence > turn.sequence):
+            submitted = self.submitted_answer_for_turn(run_id, str(submission_turn.id))
+            if submitted is not None:
+                return submitted
         if turn is None:
             return ModelTurnResult()
         prefix = f"message:{run_id}:{turn.id}:"

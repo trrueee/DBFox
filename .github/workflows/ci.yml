@@ -115,6 +115,11 @@ jobs:
           python -m mypy --no-warn-unused-configs --follow-imports=skip
           engine build_sidecar.py --no-incremental
 
+      - name: Type-check native backends against the Windows target
+        run: >-
+          python -m mypy --no-warn-unused-configs --follow-imports=skip
+          --platform win32 engine/local_execution/windows.py engine/computer/native.py --no-incremental
+
       - name: Type-check installable DLC backends against the public API
         shell: bash
         run: |

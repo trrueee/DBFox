@@ -105,7 +105,6 @@ def test_budget_keeps_current_request_and_drops_old_history_first() -> None:
                 facts={"payload": "y" * 3_000},
             )
         ],
-        run_focus={"missing": ["inline_evidence"]},
         sources=[],
         hash="budget-hash",
     )
@@ -117,7 +116,6 @@ def test_budget_keeps_current_request_and_drops_old_history_first() -> None:
     encoded = "\n".join(str(item["content"]) for item in plan.messages)
 
     assert "CURRENT REQUEST MUST SURVIVE" in encoded
-    assert "Deterministic completion guidance" in encoded
     assert estimate_messages_tokens(plan.messages) <= 2_000
     assert plan.omitted_messages > 0
 

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from engine.agent.control import LeaseAwareRunControl
 from engine.agent.artifact import (
     Artifact,
+    ArtifactVisibility,
     ArtifactPayloadContractResolver,
     ArtifactRelationType,
 )
@@ -86,6 +87,7 @@ from engine.tools.runtime.base import (
 )
 from engine.tools.runtime.executor import ToolExecutionControl
 from engine.tools.runtime.result import ToolResult
+from engine.tools.builtin.control import SubmitAnswerCommand
 
 
 ArtifactRepresentationProviderResolver = Callable[
@@ -248,6 +250,7 @@ class ToolDispatcher:
         try:
             materialization.require(call.name)
         except KeyError:
+            available = ", ".join(tool.name for tool in materialization.tools[:24])
             return self._reject_unavailable_call(
                 lease=lease,
                 run_id=run_id,
@@ -257,7 +260,10 @@ class ToolDispatcher:
                 error_code="UNKNOWN_TOOL",
                 summary=(
                     "The requested tool is not available in this Turn. Use only a "
-                    "tool from the supplied function definitions."
+                    "tool from the supplied function definitions, with its exact function name. "
+                    + (f"Available names: {available}. " if available else "This Turn exposes no functions. ")
+                    + ("Additional names are in the supplied definitions. " if len(materialization.tools) > 24 else "")
+                    + "No tool was executed for this call."
                 ),
             )
         registered_function = self.registry.get(call.name)
@@ -408,10 +414,25 @@ class ToolDispatcher:
                 return self._settled_result(call.id, observation)
             if isinstance(registered_function, ControlCommand):
                 try:
+                    command_input = registered_function.input_model.model_validate(
+                        invocation.authorized_input
+                    )
+                    if isinstance(registered_function, SubmitAnswerCommand):
+                        # Resolve untrusted source IDs at the existing authorization
+                        # boundary. Completion still requires successful observations.
+                        artifacts = ArtifactRepository(db, resource_discovery=self.resource_discovery)
+                        for artifact_id in command_input.cited_artifact_ids:
+                            artifact = artifacts.available_artifact(
+                                session_id=lease.session_id, current_run_id=run_id,
+                                artifact_id=artifact_id,
+                            )
+                            if artifact is None or artifact.visibility is ArtifactVisibility.INTERNAL:
+                                raise ToolInputError(
+                                    "An answer source is unavailable. Use only public Artifact IDs "
+                                    "from successful observations in this Run."
+                                )
                     command_result = registered_function.handle(
-                        registered_function.input_model.model_validate(
-                            invocation.authorized_input
-                        ),
+                        command_input,
                         ControlCommandContext(
                             db=db,
                             lease=lease,

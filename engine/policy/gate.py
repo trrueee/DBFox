@@ -1,7 +1,8 @@
 from __future__ import annotations
 import logging
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, get_args
 from pydantic import BaseModel, Field, ValidationError
+from pydantic_core import ErrorType
 from sqlalchemy.orm import Session
 
 from engine.agent.repositories.artifact import ArtifactRepository
@@ -14,6 +15,7 @@ from engine.tools.runtime.admission import (
 from engine.tools.runtime.registry import ToolRegistry
 
 logger = logging.getLogger("dbfox.policy.gate")
+_VALIDATION_ERROR_TYPES = frozenset(get_args(ErrorType))
 
 
 class PolicyDecision(BaseModel):
@@ -28,17 +30,42 @@ class PolicyDecision(BaseModel):
 def _safe_input_contract_reason(
     tool_name: str,
     error: ValidationError,
+    input_schema: dict[str, Any],
 ) -> str:
     """Project Pydantic failures without reflecting model-authored values."""
 
+    # Error locations can contain extra-property and mapping keys from the input.
+    # Only vocabulary from the declared schema is safe to include in a diagnostic.
+    declared_fields: set[str] = set()
+    pending: list[Any] = [input_schema]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, dict):
+            properties = node.get("properties")
+            if isinstance(properties, dict):
+                declared_fields.update(properties)
+            pending.extend(value for value in node.values() if isinstance(value, (dict, list)))
+        elif isinstance(node, list):
+            pending.extend(node)
+
     issues: list[str] = []
-    for item in error.errors(include_url=False, include_input=False):
-        location = ".".join(str(part) for part in item.get("loc") or ()) or "root"
-        issue_type = str(item.get("type") or "invalid")
+    for item in error.errors(include_url=False, include_input=False, include_context=False)[:8]:
+        location = ".".join(
+            str(part)[:64] if (
+                isinstance(part, str) and part in declared_fields
+                or isinstance(part, int) and 0 <= part <= 1_000_000
+            ) else "<key>"
+            for part in item.get("loc", ())[:8]
+        ) or "root"
+        issue_type = item.get("type", "invalid")
+        if issue_type not in _VALIDATION_ERROR_TYPES:
+            issue_type = "invalid"
         issue = f"{location} ({issue_type})"
         if issue not in issues:
             issues.append(issue)
-    summary = ", ".join(issues[:8]) or "arguments (invalid)"
+    summary = (", ".join(issues) or "arguments (invalid)")[:1_500]
+    if error.error_count() > 8:
+        summary += "; additional errors omitted"
     return (
         f"Tool {tool_name} arguments violate its declared input contract. "
         f"Correct these schema locations and submit a complete call: {summary}."
@@ -265,7 +292,7 @@ class PolicyGate:
             except ValidationError as exc:
                 return PolicyDecision(
                     status="blocked",
-                    reason=_safe_input_contract_reason(tool_name, exc),
+                    reason=_safe_input_contract_reason(tool_name, exc, tool.spec.input_schema),
                     risk_level="danger",
                     error_code="TOOL_INPUT_INVALID",
                 )

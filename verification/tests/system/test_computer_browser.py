@@ -2,16 +2,16 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import Thread
+from threading import Event, Thread
 
 import pytest
 from sqlalchemy.orm import sessionmaker
 
 from engine.computer.browser import edge_executable
 from engine.computer.contracts import ActInput, ComputerError, ShareInput
-from engine.computer.runtime import ComputerRuntime
 from engine.models import AgentSession, Project
 from verification.support.metadata import create_migrated_metadata_engine
 
@@ -171,6 +171,13 @@ def test_production_run_loop_approvals_artifacts_and_native_image_input(computer
                 pending = db.query(AgentApproval).filter_by(run_id=run.id, status="pending").one()
                 request = json.loads(pending.requested_action_json)
                 assert "target" in request["review"]
+                review = request["review"]
+                if review["action"] in {"type_text", "click"}:
+                    source = outputs["navigate" if review["action"] == "type_text" else "type"]["facts"]
+                    assert review["observation_artifact_id"] == source["observation_artifact_id"]
+                    assert review["image_width"] == source["observation"]["image_width"]
+                    assert review["image_height"] == source["observation"]["image_height"]
+                    assert review["observed_at"] == source["observation"]["observed_at"]
                 approvals.append(pending.id)
                 ApprovalRepository(db).resolve(approval_id=pending.id, expected_version=0, approved=True, actor="user")
                 lease = SessionRepository(db).claim(session_id="s", owner="computer-resume", ttl_seconds=120)
@@ -252,3 +259,103 @@ def test_authenticated_http_sharing_preview_foreign_scope_and_global_stop(comput
         assert client.get("/api/v1/conversations/s/computer").json()[0]["status"] == "paused"
     finally:
         client.close()
+
+
+def test_slow_navigation_does_not_hold_the_metadata_writer(computer, monkeypatch) -> None:
+    runtime, url, sessions, _snapshot = computer
+    option = next(item for item in runtime.inventory() if item.target.kind == "browser")
+    grant = runtime.share("s", ShareInput(inventory_id=option.inventory_id, permission="control"))
+    ref = runtime.ref(grant)
+    runtime.act("s", ref, None, url, "warmup", lambda: False)
+    with sessions.begin() as db:
+        db.add(AgentSession(id="other-writer", project_id="p"))
+    other = runtime.store.create("other-writer", option.target, permission="control", duration_minutes=5)
+    entered, release = Event(), Event()
+    requests = []
+    original = _Page.do_GET
+
+    def delayed(handler):
+        if handler.path == "/slow":
+            requests.append(handler.path)
+            entered.set()
+            assert release.wait(6)
+        original(handler)
+
+    monkeypatch.setattr(_Page, "do_GET", delayed)
+    with ThreadPoolExecutor(2) as pool:
+        navigation = pool.submit(runtime.act, "s", ref, None, url + "slow", "slow", lambda: False)
+        try:
+            assert entered.wait(3)
+            stopped = pool.submit(runtime.stop, "other-writer", target_id=other.id)
+            stopped.result(timeout=2)
+            assert runtime.store.get("other-writer", other.id).status == "paused"
+            assert not navigation.done(), "The controlled network wait ended before the independent write."
+        finally:
+            release.set()
+            navigation.result(timeout=6)
+    assert requests == ["/slow"]
+
+
+def test_stop_interrupts_an_already_submitted_navigation_without_replay(computer, monkeypatch) -> None:
+    runtime, url, _sessions, _snapshot = computer
+    option = next(item for item in runtime.inventory() if item.target.kind == "browser")
+    grant = runtime.share("s", ShareInput(inventory_id=option.inventory_id, permission="control"))
+    entered, release = Event(), Event()
+    requests = []
+    original = _Page.do_GET
+
+    def delayed(handler):
+        if handler.path == "/blocked":
+            requests.append(handler.path)
+            entered.set()
+            assert release.wait(6)
+        try:
+            original(handler)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # Expected when the authorized browser process is terminated.
+
+    monkeypatch.setattr(_Page, "do_GET", delayed)
+    with ThreadPoolExecutor(2) as pool:
+        pending = pool.submit(runtime.act, "s", runtime.ref(grant), None, url + "blocked", "interrupt", lambda: False)
+        try:
+            assert entered.wait(3)
+            stopped = pool.submit(runtime.stop, "s", target_id=grant.id)
+            stopped.result(timeout=2)
+            with pytest.raises(ComputerError):
+                pending.result(timeout=2)
+            assert runtime.store.get("s", grant.id).status == "paused"
+        finally:
+            release.set()
+    assert requests == ["/blocked"]
+
+
+def test_commit_failure_after_dispatch_preserves_unknown_outcome_and_does_not_replay(computer, monkeypatch) -> None:
+    from sqlalchemy import event
+    runtime, url, sessions, _snapshot = computer
+    option = next(item for item in runtime.inventory() if item.target.kind == "browser")
+    grant = runtime.share("s", ShareInput(inventory_id=option.inventory_id, permission="control"))
+    requests = []
+    original = _Page.do_GET
+
+    def record(handler):
+        if handler.path == "/commit-failure":
+            requests.append(handler.path)
+        original(handler)
+
+    monkeypatch.setattr(_Page, "do_GET", record)
+    metadata = sessions.kw["bind"]
+
+    def fail_commit(_connection):
+        raise RuntimeError("Injected metadata commit failure after browser submission")
+
+    event.listen(metadata, "commit", fail_commit)
+    try:
+        with pytest.raises(ComputerError) as failure:
+            runtime.act("s", runtime.ref(grant), None, url + "commit-failure", "commit-failure", lambda: False)
+        assert failure.value.code == "COMPUTER_OUTCOME_UNKNOWN"
+    finally:
+        event.remove(metadata, "commit", fail_commit)
+    assert requests == ["/commit-failure"]
+    observed = runtime.observe("s", runtime.ref(grant), "after-unknown", lambda: False)
+    assert observed.url == url + "commit-failure"
+    assert observed.title == "DBFox computer fixture"

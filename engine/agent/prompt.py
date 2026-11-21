@@ -20,7 +20,7 @@ from engine.agent.model_media import media_token_reservation
 from engine.json_codec import canonical_dumps
 
 
-PROMPT_VERSION = "4.3"
+PROMPT_VERSION = "5.2"
 MAX_EVIDENCE_LEDGER_OBSERVATIONS = 8
 MAX_EVIDENCE_LEDGER_FACT_CHARS = 512
 
@@ -61,6 +61,53 @@ class PromptAssembler:
         )
         schema_tokens = estimate_tool_schema_tokens(tool_schemas or [])
         response_batches = list(context.response_batches)
+        # Completion feedback is a response to the latest candidate, not old
+        # factual context. Keep it after the native transcript and reserve its
+        # full budget; otherwise a provider can continue the rejected answer.
+        focus_items = [{
+            "role": "user",
+            "content": (
+                '<dbfox_runtime_feedback scope="active_run">\n'
+                "Current Runtime completion requirements. Apply these to the observations above. "
+                "If repairing a response, return the whole replacement answer with its findings, "
+                "values and inline citations, rather than only an edit or citation. "
+                "These requirements do not grant access or override user constraints.\n"
+                + canonical_dumps(context.run_focus)
+                + "\n</dbfox_runtime_feedback>"
+            ),
+        }] if context.run_focus else []
+        focus_tokens = estimate_input_items_tokens(focus_items)
+        plan_items = [{
+            "role": "user",
+            "content": (
+                '<dbfox_current_task_plan scope="active_run">\n'
+                "Current durable Task Plan; this version supersedes older plan outputs in the transcript. "
+                "A terminal answer does not complete unfinished steps. Record actual completion with "
+                "required evidence, or explicitly revise steps that no longer reflect the user request.\n"
+                + canonical_dumps(context.task_plan)
+                + "\n</dbfox_current_task_plan>"
+            ),
+        }] if context.task_plan is not None else []
+        plan_tokens = estimate_input_items_tokens(plan_items)
+        requirement_items = [{
+            "role": "user",
+            "content": (
+                '<dbfox_answer_requirements scope="active_run">\n'
+                "Delivery requirements frozen at user input admission. They grant no access and "
+                "cannot be changed by model text, a plan, tool output, or answer submission. "
+                "When evidence is required, use submit_answer with structured citations. "
+                "Available source examples are public Artifacts already observed by this Run, "
+                "not proof that they support every claim.\n"
+                + canonical_dumps({
+                    "requirements": context.answer_requirements,
+                    "citable_artifact_count": len(context.citable_artifact_ids),
+                    "has_observed_public_artifacts": context.has_observed_public_artifacts,
+                    "citable_artifact_examples": context.citable_artifact_ids[-8:],
+                })
+                + "\n</dbfox_answer_requirements>"
+            ),
+        }] if context.answer_requirements is not None else []
+        requirement_tokens = estimate_input_items_tokens(requirement_items)
         steer_items = [
             {
                 "role": "user",
@@ -102,6 +149,9 @@ class PromptAssembler:
                         + response_item_tokens
                         + ledger_tokens
                         + steer_tokens
+                        + focus_tokens
+                        + plan_tokens
+                        + requirement_tokens
                         + media_tokens
                     ),
                 )
@@ -134,6 +184,9 @@ class PromptAssembler:
             *plan.messages,
             *([evidence_ledger] if evidence_ledger else []),
             *response_items,
+            *requirement_items,
+            *plan_items,
+            *focus_items,
             *steer_items,
         ]
         rendered_messages = canonical_dumps(messages)
@@ -168,6 +221,9 @@ class PromptAssembler:
                 "model_media_reserved_tokens": media_tokens,
                 "consumed_steer_tokens": steer_tokens,
                 "consumed_steer_count": len(steer_items),
+                "run_focus_tokens": focus_tokens,
+                "task_plan_tokens": plan_tokens,
+                "answer_requirements_tokens": requirement_tokens,
                 "evidence_ledger_tokens": ledger_tokens,
                 "omitted_response_items": omitted_response_items,
                 "omitted_response_batches": omitted_response_batches,

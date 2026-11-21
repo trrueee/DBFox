@@ -57,7 +57,6 @@ def estimate_tool_schema_tokens(schemas: list[dict[str, Any]]) -> int:
 class ContextSegmentKind(StrEnum):
     SYSTEM = "system"
     CURRENT_REQUEST = "current_request"
-    RUN_FOCUS = "run_focus"
     PREVIOUS_RUN_OUTCOME = "previous_run_outcome"
     SELECTED_ARTIFACT = "selected_artifact"
     RESOURCE_DIRECTORY = "resource_directory"
@@ -75,7 +74,6 @@ class ContextSegmentKind(StrEnum):
 class ContextPriority(IntEnum):
     SYSTEM = 1_000
     CURRENT_REQUEST = 950
-    RUN_FOCUS = 875
     PREVIOUS_RUN_OUTCOME = 865
     SELECTED_ARTIFACT = 850
     RESOURCE_DIRECTORY = 846

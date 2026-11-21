@@ -1,4 +1,4 @@
-"""Versioned, dynamic Task Plan shown as product progress rather than a graph."""
+"""Versioned execution commitments and progress, without a second task graph."""
 
 from __future__ import annotations
 
@@ -59,6 +59,14 @@ class TaskPlan(BaseModel):
     summary: str | None = Field(default=None, max_length=1_000)
     created_at: datetime
     updated_at: datetime
+
+    @property
+    def is_settled(self) -> bool:
+        """Only explicit step transitions can settle the declared plan."""
+        return self.status is PlanStatus.COMPLETED and all(
+            step.status in {PlanStepStatus.COMPLETED, PlanStepStatus.SKIPPED}
+            for step in self.steps
+        )
 
     @model_validator(mode="after")
     def validate_steps(self) -> "TaskPlan":

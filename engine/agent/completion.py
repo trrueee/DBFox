@@ -119,8 +119,11 @@ class SemanticCitationConstraint:
             )
         return CompletionConstraintResult(
             kind="missing",
-            reason=("An answer based on observed evidence must cite that Artifact inline. "
-                    + ("Use {{cite:" + sorted(artifact_ids)[0] + "}} next to the supported claim. "
+            reason=("Rewrite the complete answer, preserving its findings and values, "
+                    "with inline evidence citations. Do not return only a citation or an edit. "
+                    + ("When available, use submit_answer with " + sorted(artifact_ids)[0]
+                       + " in the supported part's citations array. For an assistant-text answer use {{cite:"
+                       + sorted(artifact_ids)[0] + "}} next to its supported claim. "
                        if artifact_ids else "")
                     + "An Artifact embed does not satisfy this citation requirement."),
             requirements=[self.requirement],
@@ -197,10 +200,8 @@ class CompletionPolicy:
                 model_result=model_result,
             )
         }
-        cited_artifact_ids = {
-            artifact_id
-            for artifact_id, _, _ in citation_references(model_result.answer_text)
-        }
+        citations = citation_references(model_result.answer_text)
+        cited_artifact_ids = {artifact_id for artifact_id, _, _ in citations}
         embedded_artifact_ids = artifact_embed_ids(model_result.answer_text)
 
         turn_budget_reached = turn_count >= max_turns
@@ -232,6 +233,20 @@ class CompletionPolicy:
                     "The model text is not a completed answer for the active request."
                 ),
                 missing=["completed_answer"],
+            )
+
+        answer_without_citations = model_result.answer_text
+        for _, start, end in reversed(citations):
+            answer_without_citations = answer_without_citations[:start] + answer_without_citations[end:]
+        if citations and not answer_without_citations.strip(" \t\r\n[]()_*`.,:;!?，。；：！？、"):
+            return CompletionDecision(
+                kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.REPAIR,
+                reason=(
+                    "Rewrite the complete answer with its supported findings and values. "
+                    "Keep inline evidence citations next to those claims; citations alone "
+                    "do not answer the user's request."
+                ),
+                missing=["answer"],
             )
 
         if has_invalid_citation_syntax(model_result.answer_text):
@@ -266,6 +281,10 @@ class CompletionPolicy:
             for observation in successes
             for artifact_id in observation.artifact_ids
         }
+        # Bounded prompt history is not the Artifact authorization boundary.
+        # This index is resolved from successful durable observations and the
+        # existing Resource fence, including sources older than the prompt slice.
+        observed_artifact_ids.update(context.citable_artifact_ids)
         if cited_artifact_ids - observed_artifact_ids:
             return CompletionDecision(
                 kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
@@ -280,6 +299,37 @@ class CompletionPolicy:
                     "observations."
                 ),
                 missing=["valid_artifact_embeds"],
+            )
+
+        requirements = context.answer_requirements
+        if requirements is not None and not requirements.is_satisfied(
+            submitted_artifact_ids=(model_result.submitted_answer.cited_artifact_ids
+                                    if model_result.submitted_answer is not None else None),
+            citable_artifact_ids=context.citable_artifact_ids,
+            has_observed_public_artifacts=context.has_observed_public_artifacts,
+        ):
+            return CompletionDecision(
+                kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.REPAIR,
+                reason=(
+                    "The admitted answer requirements need structured evidence. Submit the complete "
+                    "answer using submit_answer, putting exact observed public Artifact IDs in each "
+                    "supported part's citations array. Textual Artifact IDs and raw citation markup "
+                    "do not satisfy this contract. "
+                    + ("Available source examples: " + ", ".join(context.citable_artifact_ids[-8:])
+                       if context.citable_artifact_ids else
+                       "No citable source has been observed. Obtain authorized evidence before delivery; "
+                       "do not invent a source or claim success.")
+                ),
+                missing=["structured_evidence"],
+            )
+
+        if context.task_plan is not None and not context.task_plan.is_settled:
+            return CompletionDecision(
+                kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
+                reason=("The current Task Plan still has unfinished work. Complete or explicitly revise "
+                        "its steps using actual results and required evidence before delivering a complete answer. "
+                        "The end of a model response cannot skip the remaining work."),
+                missing=["settled_plan"],
             )
 
         if turn_budget_reached:
@@ -371,10 +421,10 @@ class CompletionPolicy:
         """Decide whether a forced stop has durable, safe work to return.
 
         A completed answer candidate still passes the normal evidence and
-        citation policy. Without an answer, only a capability support that has
-        verified durable work can opt into the bounded-partial response
-        composed by Terminalizer. Core never infers domain evidence from an
-        Artifact payload.
+        citation policy. Supported durable work permits repair of an invalid
+        candidate, not publication of it. Without an answer, a capability
+        support can opt into the bounded-partial response composed by
+        Terminalizer. Core never infers domain evidence from an Artifact payload.
         """
 
         if model_result.has_completed_answer_candidate:
@@ -386,8 +436,22 @@ class CompletionPolicy:
             )
             if decision.kind is CompletionKind.PARTIAL:
                 return decision.model_copy(update={"reason": reason})
+            if any(
+                support.supports_bounded_partial(context=context)
+                for support in self.supports
+            ):
+                return decision.model_copy(update={"kind": CompletionKind.REPAIR})
             return decision
 
+        if context.answer_requirements is not None and not context.answer_requirements.is_satisfied(
+            submitted_artifact_ids=None, citable_artifact_ids=context.citable_artifact_ids,
+            has_observed_public_artifacts=context.has_observed_public_artifacts,
+        ):
+            return CompletionDecision(
+                kind=CompletionKind.REPAIR if context.citable_artifact_ids else CompletionKind.FAIL,
+                reason="The admitted answer requirements still need a structured evidence delivery; a generated partial summary cannot satisfy them.",
+                missing=["structured_evidence"],
+            )
         if any(
             support.supports_bounded_partial(context=context)
             for support in self.supports

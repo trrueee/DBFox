@@ -15,6 +15,18 @@
 Host 电脑能力的所有权与交互见[电脑操作与受控浏览器](./computer-use.md)，
 源码、模型、桌面和 Frozen 分层结果见[电脑工作台验收](../quality/computer-workbench-verification.md)。
 
+当前计划的模型上下文与最终事务约束见[连续执行上下文](./agent-context-continuity.md)：
+`PlanRepository.current` → `ContextSnapshot.task_plan` → Prompt / CompletionPolicy →
+`Terminalizer` / Plan owner。它复用同一 `agent_task_plans`，不以模型结束信号自动跳过未执行步骤。
+
+结构化答案走 `AnswerSubmission` → `SubmitAnswerCommand` → 同一 Invocation / Observation →
+`RunRepository.submitted_answer_for_turn` → 原有 Completion / Terminalizer / Evidence → 正文引用
+和 Dock。模型不生成可信 Evidence，也不通过提交函数批准自身成功。
+
+用户任务的可选 `AnswerRequirements` 走 Conversation Input API → 原有 `Run.request_json` →
+Context / Prompt → CompletionPolicy → Terminalizer 最终事务。桌面新任务默认要求在观察到
+公开工件后提交结构化引用；旧任务、普通无来源解释和已有 DLC 约束的语义保留。
+
 Workbench 导出后打开正式 Artifact 的调用链见[DLC 工件导航](./dlc-artifact-navigation.md)：
 `sdk/frontend` → `extensionHost` → 现有 Session/Run Artifact repository → `conversationStore`
 → Artifact Dock。导航只读取和校验持久身份，不产生新的 Run 或导出写入；门禁见
@@ -133,7 +145,7 @@ App Shell 组织文件夹项目与对话、固定 Main Surface、Dock registry�
 - `ProjectCreateForm` 打开 native canonical folder，以文件夹名创建/复用项目。opaque idempotency key 防止重复项目；路径仍只归 Workspace binding。不同路径可有相同项目名，迁移仅放开 name 唯一约束。
 - `dlcs/dbfox.workspace/frontend/index.js` 通过原有 `binding.get/create`、`files.list/read` 操作提供文件树与只读内容；有界目录/文本与 containment 校验保持在 owner 后端。过大目录明确显示部分结果，嵌套 lazy ancestors 用 Host Tree 加载。
 - Workspace 文件成果通过 owner 的 `backend/representation.py` 校验冻结来源、绑定版本和 hash 后分页读取，复用 Host FileContent；`file_search` 空 query 浏览一层、非空 query 递归查找，与 grep 共用目录项总量预算。
-- Tool、文件 operation 和 Representation 共用 `file_read_output`，offset/limit 按 Unicode 字符计，返回 next_offset；精确编辑保留 CRLF，换行不匹配时提供修正指引。
+- Tool、文件 operation 和 Representation 共用 `file_read_output`，offset/limit 按 Unicode 字符计，返回 next_offset；`file_edit@3` 在统一 LF/CRLF 文档中按文档约定匹配并保留换行，混合/仅 CR 文件按字面处理；raw hash、唯一性及写前冲突校验不变。
 - Workspace 的绑定目录是文件、搜索与命令共用的路径基准。目录参数留空或使用 `.` 指向项目根，返回的文件路径可直接用于后续操作。名称搜索的 `path_prefix` 选择目录，内容搜索也接受单个文件。路径拒绝由 owner 返回可修正的原因，Tool Observation 与文件操作 API 共用该反馈。目录解析复用 Python 的规范路径与包含关系校验，搜索作用域的设计参考 VS Code 的项目目录约束。[Python pathlib](https://docs.python.org/3.12/library/pathlib.html#pathlib.Path.resolve) · [VS Code RelativePattern](https://code.visualstudio.com/api/references/vscode-api#RelativePattern)
 - Workspace 写入前置条件统一在 `WorkspaceService`；无 hash 只能新建，覆盖在暂存完成后校验 hash，工具与 public operation 共用固定冲突，后者返回 409。Dock 直接使用规范 target，显式刷新目录与当前文件，并取消旧读取；分页冲突不拼接新版本。验证见 `test_workspace_mutation_safety.py`、`test_dbfox_workspace_dlc_package.py` 与 `dbfoxWorkspaceFixture.test.ts`。
 - `components/resources/ReferenceCard` / `ResourceIcon` 统一消息、输入框和结果引用；`FileContent` 复用 CodeMirror 官方 grammar 与已有 Markdown renderer，支持预览/源码/分栏。
@@ -228,6 +240,8 @@ Registry 以 `ToolKey(owner_id, local_name)` 注册工具定义、input/output s
 Resource kind 必须 namespaced；DLC provider/resolver 和 Tool 只能直接使用 `owner_id.*`。跨 capability 由 Agent 编排 Artifact/用户意图，不能把另一个 DLC 的私有 resolver 对象作为隐式 service locator。Installable in-process Tool 只接受 `network`/`filesystem_read`；`filesystem_write` 与 `subprocess` 必须使用现有 isolated worker，并由签名 manifest permission、Invocation Approval、frozen package digest、超时和进程树取消共同约束。该 worker 不构成不可信代码 OS sandbox。
 
 Project discovery kind 只决定 Tool discoverability，不授予整个 Project。模型直接调用真实领域 Tool；Dispatcher 从 validated selector 或同一 Run Artifact 绑定精确 `(kind,id,version)`，写入 `agent_tool_invocations.resource_refs_json`，随后 Policy、Approval、resolver、retry 与 recovery 都只消费该 Invocation authority。已接纳 Input 不在 Run 中修改，也没有用户可见的 `select_project_resources` 控制步骤。
+
+未知函数反馈仅列出本轮物化的有界准确名称，不创建别名或执行旁路；参数诊断只保留声明字段、有界索引和标准错误类型。详见[输入纠正与编辑合同](agent-tool-context-memory-contract.md#工具输入纠正与文件编辑agent-46)。
 
 Policy 对规范化工具名和 canonical input 判定。Approval 与具体 Invocation/version/generation 绑定。ToolExecutor 执行 timeout、retry、concurrency、output bytes 和 cancel；未注册 isolated backend 的高权限 capability 会在注册阶段失败。
 

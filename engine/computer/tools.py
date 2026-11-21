@@ -150,7 +150,9 @@ class ComputerAct(_ComputerTool, BaseTool[ActInput, ActionResult]):
             resource_ref=ref, approval_subject=input.model_dump(mode="json"),
             approval_review={"kind": "computer", "target": grant.target.title, "permission": grant.permission, "action": input.action,
                              "text": input.text or "", "key": input.key or "", "element": (node.name or node.role) if node else tab.title if tab else "画面位置",
-                             "position": input.point.model_dump() if input.point else None, "observed_at": before.observed_at})
+                             "position": input.point.model_dump() if input.point else None, "observed_at": before.observed_at,
+                             "observation_artifact_id": input.observation_artifact_id,
+                             "image_width": before.image_width, "image_height": before.image_height})
 
     def run(self, input: ActInput, context: ToolRunContext) -> ToolOutcome[ActionResult]:
         ref = _scope(context, input.target_id)

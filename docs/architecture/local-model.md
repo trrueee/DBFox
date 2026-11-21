@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-11-10
+> 最后核验：2026-11-21
 
 Windows x64 上，DBFox 可以使用由 Sidecar 管理的 Ollama 模型。安装脚本将运行时、模型权重和推理临时文件放在指定的本地磁盘。应用数据目录只保存模型名称、权重摘要、大小、路径和上下文长度。
 
@@ -34,8 +34,32 @@ pwsh -NoProfile -File .\scripts\setup-local-model.ps1 -InstallRoot E:\DBFoxLocal
 
 侧车按需启动一个 Ollama 进程，绑定动态的 `127.0.0.1` 端口。只传递本机运行需要的环境，禁用 Ollama 云功能。引擎在发送对话前核对本机模型的名称与摘要，通过既有 Responses SDK 适配器完成流式传输和工具调用。启用本地模式后，配置错误、权重变化或启动失败以明确的错误结束请求。进程关闭或崩溃时由 Job Object 清理，后续请求按需启动新实例。
 
+Host 内部区分具有启动副作用的 `endpoint()` 与只读 `running_endpoint()`：后者只在现有
+进程仍活动且管理器未关闭时返回端点，不启动、重启或恢复模型。Bench 的结束遥测只使用
+此只读查询；进程消失、连接失败或元数据无效时记录 `unavailable`，保留已经持久化的
+Run/Trial 结果。遥测失败不替代任务失败原因，也不会触发模型请求或云端切换。
+
 选择 Ollama 是因为其官方 Windows 运行时已提供量化权重管理、GPU 推理和兼容 Responses 的流式 API。发给 Ollama 的工具定义保留声明中的可选参数与默认值。持久化工具合同、执行校验和审批仍由既有 Tool Runtime 持有。DBFox 复用 HTTP SDK、上下文预算和进程树监督，新增的管理代码负责本机生命周期和配置，未新增 Python 或 Node 依赖。首发安装脚本和进程管理只支持 Windows x64。
 
 - [Ollama Windows 运行时](https://docs.ollama.com/windows)
 - [Ollama Responses 合同](https://docs.ollama.com/api/openai-compatibility#responses-api)
 - [Qwen3.5-4B 权重与规格](https://ollama.com/library/qwen3.5:4b-q4_K_M)
+
+
+## 真实任务验证
+
+生产工厂将本地输入预算设为 `context_length - 2048 - 1024`，32K 配置下为 29696 tokens。
+工具 Schema、会话与观察均计入该预算。标称模型上下文不改变本机配置，也不会因此使用
+通用 65K 上限。运行时拒绝与已接纳模型名称/摘要不符的配置，失败不切换云端。
+
+Data Agent Bench 可通过 `--local-model-profile` 显式选择已有的本机 profile；不带这个
+参数的旧云端评测入口仍需要明确凭据和 opt-in。不要将二者混为自动降级路径。验证期间
+使用单独的 profile 副本，将 `state_dir`、`scratch_dir` 指向私有 D 盘目录并预先创建它们，
+保留原模型名称、摘要、权重路径和上下文；不修改应用 profile，也不重复下载权重。
+
+原三题各三次的生产 RunLoop 测量证明：4B 可以算出正确查询结果，但完整正文和引用
+交付仍不稳定。新增两题各三次还发现一次只有检查计划、未计算却提前完成的回答；不能
+把原三题数值正确外推为所有问题正确。查询成功后停止测试独占模型的故障验证确认：
+任务明确失败、已有 Result 保留、不重放查询、不解析云端配置。当前结果及未验证的
+9B、Electron、流式半途中断和安装包范围见
+[Phase 0 记录](../quality/local-data-phase0.md)，不能把设置页“测试推理”通过当作业务能力通过。

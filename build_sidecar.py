@@ -126,7 +126,6 @@ HIDDEN_IMPORTS = [
     "defusedxml.ElementTree",
     "et_xmlfile",
     "pymysql",
-    "sshtunnel",
     "keyring",
     "sqlglot",
     # SQLGlot resolves dialect modules with importlib at runtime, which static

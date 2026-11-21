@@ -27,6 +27,18 @@ export type ActiveDlcItem = {
 };
 
 /**
+ * AnswerRequirements
+ */
+export type AnswerRequirements = {
+    /**
+     * Evidence
+     *
+     * Require structured submit_answer citations when public Artifacts have been observed, or require at least one observed source even when none is available yet. This delivery requirement grants no access and does not prove task correctness.
+     */
+    evidence?: 'when_observed' | 'required';
+};
+
+/**
  * Approval
  */
 export type Approval = {
@@ -704,6 +716,7 @@ export type ConversationInputReference = {
  * ConversationInputRequest
  */
 export type ConversationInputRequest = {
+    answer_requirements?: AnswerRequirements | null;
     /**
      * Api Base
      */

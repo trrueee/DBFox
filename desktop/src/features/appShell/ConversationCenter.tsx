@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useRef, useState } from "react";
 import {
   PlusIcon,
 } from "@/components/icons";
@@ -8,6 +8,7 @@ import {
   useWorkspaceStore,
   selectActiveWorkbench,
   selectActiveWorkbenchScopeId,
+  getActiveWorkbenchKey,
 } from "../../stores/workspaceStore";
 import { getUserErrorMessage } from "../../lib/api/client";
 import { SmartQueryHome } from "../workspace/SmartQueryHome";
@@ -59,20 +60,32 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
   const setAskInputValue = useWorkspaceStore(state => state.setDraftInput);
   const [submitting, setSubmitting] = useState(false);
   const activeScope = useWorkspaceStore(selectActiveWorkbenchScopeId);
+  const draftCreations = useRef(new Map<string, Promise<string>>());
   const [submitFailure, setSubmitFailure] = useState<{ projectId: string; scopeId: string; error: unknown } | null>(null);
   const submitError = submitFailure?.projectId === activeProjectId && submitFailure.scopeId === activeScope ? submitFailure.error : null;
   const [pendingSubmission, setPendingSubmission] = useState<PendingSubmission | null>(null);
   const displayAsk = pendingAsk ?? askInputValue;
-  const ensureDraftConversation = async (title = "附件分析") => {
+  const ensureDraftConversation = useCallback(async (title = "附件分析") => {
     const state = useWorkspaceStore.getState();
     const existing = selectActiveWorkbench(state).draftConversationId;
     if (existing) return existing;
     const capturedScope = state.ensureActiveWorkbenchScope();
-    const detail = await useConversationStore.getState().createAndOpenConversation(displayAsk.trim() || title);
-    if (selectActiveWorkbenchScopeId(useWorkspaceStore.getState()) !== capturedScope) throw new Error("会话已切换。");
-    useWorkspaceStore.getState().setDraftConversationId(detail.id);
-    return detail.id;
-  };
+    const capturedKey = getActiveWorkbenchKey(state);
+    const pending = draftCreations.current.get(capturedScope);
+    if (pending) return pending;
+    const requests = draftCreations.current;
+    const request: Promise<string> = useConversationStore.getState().createAndOpenConversation(displayAsk.trim() || title)
+      .then((detail) => {
+        const current = useWorkspaceStore.getState();
+        if (current.workbenchByConversation[capturedKey]?.scopeId !== capturedScope) throw new Error("草稿已变化，请重新开始。");
+        current.setDraftConversationId(detail.id, capturedKey);
+        return detail.id;
+      }).finally(() => {
+        if (requests.get(capturedScope) === request) requests.delete(capturedScope);
+      });
+    requests.set(capturedScope, request);
+    return request;
+  }, [displayAsk]);
   const attachment = useAttachmentInput(ensureDraftConversation, references);
 
   const handleSubmitAsk = useCallback(async () => {
@@ -86,7 +99,7 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
       if (!submission) {
         const draftId = selectActiveWorkbench(useWorkspaceStore.getState()).draftConversationId;
         const capturedReferences = captureWorkbenchInput(references, draftId ?? null);
-        const conversationId = draftId ?? (await useConversationStore.getState().createAndOpenConversation(text)).id;
+        const conversationId = draftId ?? await ensureDraftConversation(text);
         submission = {
           scopeId: capturedScope,
           conversationId,
@@ -124,6 +137,7 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
     displayAsk,
     openConversationCenter,
     pendingSubmission,
+    ensureDraftConversation,
     promoteDraftWorkbenchToConversation,
     references,
     setProjectActiveConversation,
@@ -184,7 +198,11 @@ export function ConversationCenter({ onNewProject }: ConversationCenterProps) {
         }}
         onSubmitAsk={() => void handleSubmitAsk()}
         projectId={activeProjectId}
-        context={<ComposerContext busy={submitting || attachment.busy} onOpenComputer={async () => openComputerDock(await ensureDraftConversation("电脑任务"))} />}
+        context={<ComposerContext key={activeProjectId} busy={submitting || attachment.busy} onOpenComputer={async () => {
+          const capturedScope = useWorkspaceStore.getState().ensureActiveWorkbenchScope();
+          const conversationId = await ensureDraftConversation("电脑任务");
+          if (selectActiveWorkbenchScopeId(useWorkspaceStore.getState()) === capturedScope) openComputerDock(conversationId);
+        }} />}
         references={references}
         onAddAttachment={() => { setPendingSubmission(null); void attachment.add(); }}
         onOpenReference={(ref) => {

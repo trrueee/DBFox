@@ -4,7 +4,7 @@
 >
 > 状态：当前
 >
-> 最后核验：2026-11-08
+> 最后核验：2026-11-21
 >
 > 适用范围：Python、npm 锁文件与持续集成安全审计
 
@@ -91,19 +91,29 @@ CPython 3.14.6 / SQLite 3.53.1；既有最低 SQLite 3.51.3 门禁和 3.53.4 升
 未降级或更改审计阈值。兼容范围内刷新后，前端 118 文件 / 751 测试、lint、测试类型、
 生产构建和 Electron 38 测试通过；API 重新生成无差异。运行时/构建/工程合同 88 项通过。
 
-### 既有有期限的例外
+### 2026-11-21：移除已退役的 SSH 依赖
 
-`PYSEC-2026-2858` / `GHSA-r374-rxx8-8654` 影响 Paramiko 4.0.0 及以前版本，公告评级
-为低危，且截至 2026-08-15 没有已发布的修复版本。DBFox 只作为客户端连接用户明确
-配置的数据库 SSH 跳板，不提供 SSH 服务端；这会降低暴露面，但并未从实现上删除
-Paramiko 的 SHA-1 代码路径，因此仍按残余风险接受至 2026-11-15。例外只针对该公告，
-不忽略 Paramiko 包的其他漏洞。上游发布包含 `paramiko/paramiko@a448945` 的版本后，
-必须删除例外、升级约束并重新生成三份锁文件。
+当前 Data DLC 的 `connection.py` 在 EXPLAIN、只读执行和连接检查入口明确拒绝
+`ssh_enabled`，仓库生产源码也已没有 `sshtunnel` / `paramiko` 调用。旧 Core 的隧道实现
+退役后，输入清单和 Frozen hidden imports 没有同步清理。继续携带这些包既不能恢复 SSH
+功能，也使已于 2026-11-15 到期的 `PYSEC-2026-2858` 例外继续影响安全门禁。
 
-`GHSA-g6cj-pr64-35w5` 影响 `cryptography` 44.0.0 至 49.x，官方修复版为 50.0.0。
-DBFox 不直接使用该库，而是由 Paramiko 传递引入，因此通过标准 `constraints.txt` 将三套
-依赖解析共同限制到 `cryptography>=50.0.0,<51.0.0`，避免为了安全版本约束重新制造一项
-虚假的直接运行时依赖。
+本轮移除 `sshtunnel`、`paramiko` 的直接依赖和 `sshtunnel` hidden import，通过项目固定的
+uv 流程重新生成三份 universal 哈希锁；解析同时删除不再使用的 `bcrypt`、`pynacl`，
+其他包的版本保持不变。`osv-scanner.toml` 不再包含漏洞例外，审计阈值保持不变。
+
+没有选择升级整套 SSH 实现：当前产品并没有这条执行路径。上游
+[安全公告](https://github.com/advisories/GHSA-r374-rxx8-8654) 已将修复版标为 5.0.0，
+[Paramiko 变更记录](https://www.paramiko.org/changelog.html) 也明确了 SHA-1 的移除和
+兼容性变化；将来恢复 SSH 应单独设计和验收，不能因安装了一个包就宣称支持。
+
+`engine/dlc/trust.py`、`engine/dlc/package_builder.py` 直接使用 `cryptography` 进行 DLC
+签名和校验。因此现在将其声明为真实的直接运行时依赖，而不再借 Paramiko 间接带入。
+既有 `cryptography>=50.0.0,<51.0.0` 安全约束与 50.0.0 锁定版本不变，也没有恢复已经
+删除的 `engine/crypto.py` 凭据加密实现。OS 凭据库仍是秘密的唯一存储边界。
+
+本轮本地验证及尚未完成的跨平台、安装包验收见
+[Phase 0 记录](local-data-phase0.md)。历史测试数字仅代表其各自记录时的版本。
 
 前端依赖事实以 `desktop/package.json` 和 `desktop/package-lock.json` 为准，并使用
 `packageManager: npm@10.9.3` 与 CI 的 Node 22.18.0 工具链保持一致。`@emnapi/core` 和

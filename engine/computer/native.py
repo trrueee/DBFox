@@ -6,11 +6,12 @@ from collections.abc import Callable
 import ctypes
 import hashlib
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
 from engine.computer.contracts import ActInput, ComputerError, ComputerGrant, ComputerNode, MAX_NODES, Observation, Rect, TargetIdentity
-from engine.computer.drivers import CapturedFrame, encode_capture
+from engine.computer.drivers import CapturedFrame, PreparedAction, encode_capture
 
 _BLOCKED_APPS = frozenset({
     "dbfox.exe", "codex.exe", "chatgpt.exe", "consent.exe", "credentialuibroker.exe",
@@ -26,6 +27,8 @@ class NativeDesktop:
         self._elements: dict[str, dict[str, Any]] = {}
 
     def _init(self) -> None:
+        if sys.platform != "win32":
+            raise ComputerError("COMPUTER_PLATFORM_UNSUPPORTED", "原生窗口操作仅支持 Windows。", 503)
         if self._desktop is None:
             # Per-thread DPI coordinates keep UIA rectangles, captured pixels
             # and physical input in the same space. This changes no OS setting.
@@ -35,6 +38,8 @@ class NativeDesktop:
 
     @staticmethod
     def _identity(handle: int) -> TargetIdentity:
+        if sys.platform != "win32":
+            raise ComputerError("COMPUTER_PLATFORM_UNSUPPORTED", "原生窗口操作仅支持 Windows。", 503)
         import win32api
         import win32gui
         import win32process
@@ -158,7 +163,7 @@ class NativeDesktop:
                              truncated=truncated or bool(pending), window_handle=format(window.handle, "x"))
 
     def prepare(self, grant: ComputerGrant, before: Observation, action: ActInput,
-                check_cancelled: Callable[[], None]) -> Callable[[], None]:
+                check_cancelled: Callable[[], None]) -> PreparedAction:
         import win32gui
         from pywinauto import keyboard, mouse
         window = self._window(grant.target)
@@ -221,7 +226,7 @@ class NativeDesktop:
                 if action.action == "double_click":
                     check_cancelled()
                     mouse.click(coords=point)
-        return perform
+        return PreparedAction(perform)
 
     def forget(self, target_id: str) -> None:
         self._elements.pop(target_id, None)

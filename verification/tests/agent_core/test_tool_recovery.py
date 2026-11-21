@@ -34,8 +34,9 @@ from engine.tools.runtime import (
 )
 
 
+@pytest.mark.parametrize("available_count", [0, 2, 48])
 def test_unknown_provider_tool_is_durably_rejected_without_failing_the_run(
-    db_session, test_resource
+    db_session, test_resource, available_count,
 ) -> None:
     db_session.add(
         AgentSession(
@@ -58,14 +59,40 @@ def test_unknown_provider_tool_is_durably_rejected_without_failing_the_run(
     lease = sessions.claim(session_id="session_unknown_tool", owner="worker")
     assert lease is not None
     sessions.promote_next_input(lease=lease)
+    executed = []
+
+    class AvailableTool(BaseTool[_RecoveryInput, _RecoveryOutput]):
+        name = "inspect"
+        group = "verification"
+        description = "Inspect a verification resource."
+        input_model = _RecoveryInput
+        output_model = _RecoveryOutput
+        presentation = ToolPresentation(title="Inspect", category="explore")
+
+        def run(self, tool_input, context):
+            executed.append(tool_input.value)
+            return {"value": tool_input.value}
+
     registry = ToolRegistry()
+    for index in range(available_count):
+        tool = AvailableTool()
+        tool.name = f"inspect_{index:02d}"
+        registry.register(tool, owner="verification.available")
+    hidden = AvailableTool()
+    hidden.name = "private_hidden_tool"
+    hidden.policy = ToolPolicy(visible_to_model=False)
+    registry.register(hidden)
+    filtered = AvailableTool()
+    filtered.name = "different_group_tool"
+    filtered.group = "excluded"
+    registry.register(filtered)
     definition = AgentDefinition(
-        allowed_tool_groups=(),
+        allowed_tool_groups=("verification",),
         execution_mode="user_requested_read",
     )
     tools = materialize_tools(
         registry,
-        allowed_groups=set(),
+        allowed_groups={"verification"},
         execution_mode=definition.execution_mode,
     )
     turn = sessions.start_turn(
@@ -129,6 +156,17 @@ def test_unknown_provider_tool_is_durably_rejected_without_failing_the_run(
     payload = json.loads(first.provider_output.output)
     assert payload["status"] == "rejected"
     assert payload["error_code"] == "UNKNOWN_TOOL"
+    summary = payload["summary"]
+    if available_count:
+        assert tools.tools[0].name in summary
+        assert "exact" in summary.lower()
+    else:
+        assert "no functions" in summary.lower()
+    assert "private_hidden_tool" not in summary
+    assert "different_group_tool" not in summary
+    assert "not persisted" not in summary
+    assert len(summary) <= 2048
+    assert executed == []
     db_session.expire_all()
     assert db_session.query(AgentToolInvocation).count() == 1
     assert db_session.query(AgentObservationRecord).count() == 1

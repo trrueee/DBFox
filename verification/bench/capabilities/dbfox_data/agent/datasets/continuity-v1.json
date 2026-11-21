@@ -19,7 +19,7 @@
       "trace": {
         "all_run_statuses": ["completed"],
         "required_tools": ["sql_validate", "sql_execute_readonly", "result_inspect"],
-        "required_artifacts": ["result_view"],
+        "required_artifacts": ["dbfox.data.result_view"],
         "max_tool_calls": 5,
         "max_turns": 8,
         "max_failed_tool_calls": 0,
@@ -71,7 +71,7 @@
       "trace": {
         "all_run_statuses": ["completed"],
         "required_tools": ["update_plan", "sql_validate", "sql_execute_readonly"],
-        "required_artifacts": ["result_view"],
+        "required_artifacts": ["dbfox.data.result_view"],
         "max_tool_calls": 14,
         "max_turns": 18,
         "max_failed_tool_calls": 1,
@@ -140,7 +140,7 @@
       "trace": {
         "all_run_statuses": ["completed"],
         "required_tools": ["sql_validate", "sql_execute_readonly", "result_inspect"],
-        "required_artifacts": ["result_view"],
+        "required_artifacts": ["dbfox.data.result_view"],
         "max_tool_calls": 5,
         "max_turns": 8,
         "max_failed_tool_calls": 0,

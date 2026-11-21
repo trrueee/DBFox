@@ -45,20 +45,103 @@ def test_windows_workspace_service_cannot_launch_unmanaged_commands(workspace, m
         store.resolve(ref).run_command((sys.executable, "-c", "print('unmanaged')"))
 
 
-def test_crlf_edit_mismatch_explains_recovery_and_preserves_untouched_bytes(workspace):
-    root, store, ref, service_module = workspace
-    original = b"def value():\r\n    return 1\r\n"
-    path = root / "value.py"
+@pytest.mark.parametrize("file_eol", ["\n", "\r\n"])
+@pytest.mark.parametrize("input_eol", ["\n", "\r\n"])
+def test_text_edits_preserve_the_document_eol_and_untouched_bytes(workspace, file_eol, input_eol):
+    root, store, ref, _ = workspace
+    original = ("# 保留😀\n\ndef value():\n    return 1\n\n# unchanged\n").replace("\n", file_eol).encode("utf-8")
+    path = root / "value.txt"
     path.write_bytes(original)
     resource = store.resolve(ref)
-    snapshot = resource.read_text_file("value.py")
-    with pytest.raises(service_module.WorkspaceError, match="CRLF line endings"):
-        resource.edit_text_file("value.py", old_string="def value():\n    return 1",
-                                new_string="def value():\n    return 2", expected_sha256=snapshot.sha256)
-    assert path.read_bytes() == original
-    updated = resource.edit_text_file("value.py", old_string="return 1", new_string="return 2", expected_sha256=snapshot.sha256)
+    snapshot = resource.read_text_file("value.txt")
+    assert snapshot.content.encode("utf-8") == original
+    updated = resource.edit_text_file(
+        "value.txt",
+        old_string=("def value():\n    return 1").replace("\n", input_eol),
+        new_string=("def value():\n    return 2\n    # inserted").replace("\n", input_eol),
+        expected_sha256=snapshot.sha256,
+    )
     assert updated.sha256 != snapshot.sha256
-    assert path.read_bytes() == b"def value():\r\n    return 2\r\n"
+    expected = original.replace(
+        ("def value():\n    return 1").replace("\n", file_eol).encode(),
+        ("def value():\n    return 2\n    # inserted").replace("\n", file_eol).encode(),
+    )
+    assert path.read_bytes() == expected
+    assert updated.content.encode("utf-8") == expected
+
+
+@pytest.mark.parametrize("old_string", ["section\n    value = 1", "section\\n    value = 1"])
+def test_text_edit_never_fixes_indentation_or_decodes_literal_escapes(workspace, old_string):
+    root, store, ref, module = workspace
+    original = b"section\r\n  value = 1\r\n"
+    path = root / "strict.txt"
+    path.write_bytes(original)
+    service = store.resolve(ref)
+    snapshot = service.read_text_file(path.name)
+    with pytest.raises(module.WorkspaceError, match="not found"):
+        service.edit_text_file(path.name, old_string=old_string, new_string="other", expected_sha256=snapshot.sha256)
+    assert path.read_bytes() == original
+
+
+def test_normalized_edit_still_requires_unique_anchor_and_current_hash(workspace):
+    root, store, ref, module = workspace
+    path = root / "duplicate.txt"
+    original = b"name\r\nvalue\r\nname\r\nvalue\r\n"
+    path.write_bytes(original)
+    service = store.resolve(ref)
+    snapshot = service.read_text_file(path.name)
+    with pytest.raises(module.WorkspaceError, match="unique anchor"):
+        service.edit_text_file(path.name, old_string="name\nvalue", new_string="new\nvalue", expected_sha256=snapshot.sha256)
+    assert path.read_bytes() == original
+    path.write_bytes(original + b"external edit\r\n")
+    with pytest.raises(module.WorkspaceConflict):
+        service.edit_text_file(path.name, old_string="name\nvalue", new_string="new\nvalue", expected_sha256=snapshot.sha256, replace_all=True)
+    assert path.read_bytes() == original + b"external edit\r\n"
+    fresh = service.read_text_file(path.name)
+    service.edit_text_file(path.name, old_string="name\nvalue", new_string="new\nvalue", expected_sha256=fresh.sha256, replace_all=True)
+    assert path.read_bytes() == original.replace(b"name", b"new") + b"external edit\r\n"
+
+
+def test_mixed_line_endings_require_exact_anchors_and_preserve_unedited_regions(workspace):
+    root, store, ref, module = workspace
+    path = root / "mixed.txt"
+    original = b"first\r\nsecond\nthird\r\n"
+    path.write_bytes(original)
+    service = store.resolve(ref)
+    snapshot = service.read_text_file(path.name)
+    with pytest.raises(module.WorkspaceError, match="not found"):
+        service.edit_text_file(path.name, old_string="first\nsecond", new_string="changed", expected_sha256=snapshot.sha256)
+    assert path.read_bytes() == original
+    service.edit_text_file(path.name, old_string="second\nthird", new_string="SECOND\nthird", expected_sha256=snapshot.sha256)
+    assert path.read_bytes() == b"first\r\nSECOND\nthird\r\n"
+
+
+def test_edit_eol_normalization_cannot_create_a_no_op(workspace):
+    root, store, ref, module = workspace
+    path = root / "same.txt"
+    original = b"a\r\nb\r\n"
+    path.write_bytes(original)
+    service = store.resolve(ref)
+    snapshot = service.read_text_file(path.name)
+    with pytest.raises(module.WorkspaceError, match="identical"):
+        service.edit_text_file(path.name, old_string="a\r\nb", new_string="a\nb", expected_sha256=snapshot.sha256)
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(("content", "anchor"), [
+    ("ababa", "aba"),
+    ("段😀\r\n段😀\r\n段😀", "段😀\n段😀"),
+])
+def test_unique_edit_rejects_overlapping_anchor_positions(workspace, content, anchor):
+    root, store, ref, module = workspace
+    path = root / "overlap.txt"
+    original = content.encode("utf-8")
+    path.write_bytes(original)
+    service = store.resolve(ref)
+    snapshot = service.read_text_file(path.name)
+    with pytest.raises(module.WorkspaceError, match="unique anchor"):
+        service.edit_text_file(path.name, old_string=anchor, new_string="replacement", expected_sha256=snapshot.sha256)
+    assert path.read_bytes() == original
 
 
 def test_existing_workspace_binding_keeps_its_scope_until_revoked(tmp_path):

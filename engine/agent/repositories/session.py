@@ -31,7 +31,7 @@ from engine.agent.references import (
     ConversationInputReference,
     dump_input_references,
 )
-from engine.json_codec import canonical_dumps as _json
+from engine.json_codec import canonical_dumps as _json, load_object
 from engine.models import (
     AgentMessage,
     AgentRun,
@@ -180,6 +180,12 @@ class SessionRepository:
         references: tuple[ConversationInputReference, ...] = (),
         reply_to_request_id: str | None = None,
     ) -> Admission:
+        from engine.agent.answer_requirements import AnswerRequirements
+
+        requested_requirements = request_payload.get("answer_requirements")
+        if requested_requirements is not None:
+            requirements = AnswerRequirements.model_validate(requested_requirements)
+            request_payload = {**request_payload, "answer_requirements": requirements.model_dump(mode="json")}
         request_fingerprint = hashlib.sha256(_json({
             "content": content, "delivery_mode": delivery_mode.value,
             "resources": [{"kind": ref.kind, "id": ref.id} for ref in resource_refs],
@@ -214,6 +220,11 @@ class SessionRepository:
                 .with_for_update()
             ).scalars().first()
             if active_run is not None:
+                if requested_requirements is not None and (
+                    _json(request_payload["answer_requirements"])
+                    != _json(load_object(str(active_run.request_json or "{}")).get("answer_requirements"))
+                ):
+                    raise ValueError("Answer requirements are frozen for the active Run; start a new Run to change them")
                 return self._admit_steer(
                     aggregate=aggregate,
                     run=active_run,

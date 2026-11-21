@@ -298,6 +298,9 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       content,
       idempotency_key: idempotencyKey,
       delivery_mode: mode,
+      ...(mode === "queue" || mode === "cancel_and_replace" ? {
+        answer_requirements: { evidence: "when_observed" as const },
+      } : {}),
       ...(references.length > 0 ? {
         references: references.map((reference) => ({
           label: reference.label,

@@ -1,6 +1,8 @@
 """Public conversation API uses the canonical Session Core projections."""
 from __future__ import annotations
 
+import json
+
 from datetime import UTC, datetime
 
 import pytest
@@ -447,7 +449,8 @@ def test_empty_conversation_intent_does_not_inherit_project_workspace(
     assert load_resource_refs(str(stored_input.resource_refs_json)) == ()
 
 
-def test_admission_returns_authoritative_projection_for_immediate_ui(client, monkeypatch):
+@pytest.mark.parametrize("evidence_policy", [None, "when_observed", "required"])
+def test_admission_returns_authoritative_projection_for_immediate_ui(client, db_session, monkeypatch, evidence_policy):
     created = client.post(
         "/api/v1/conversations",
         json={"project_id": "proj-test", "title": "Streaming"},
@@ -473,6 +476,7 @@ def test_admission_returns_authoritative_projection_for_immediate_ui(client, mon
             "llm_credential_id": "credential-1",
             "api_base": "https://api.openai.com/v1",
             "model_name": "gpt-4.1-mini",
+            **({"answer_requirements": {"evidence": evidence_policy}} if evidence_policy is not None else {}),
         },
         headers=_headers(),
     )
@@ -489,6 +493,10 @@ def test_admission_returns_authoritative_projection_for_immediate_ui(client, mon
     assert projected_run["status"] == "queued"
     assert projected_run["user_message_id"] == body["user_message_id"]
     assert "assistant_message_id" not in body
+    run = db_session.get(AgentRun, body["run_id"])
+    assert json.loads(run.request_json).get("answer_requirements") == (
+        {"evidence": evidence_policy} if evidence_policy is not None else None
+    )
 
 
 def test_request_contract_rejects_missing_llm_credential_before_creating_a_run(

@@ -13,7 +13,13 @@ import pytest
 
 from sqlalchemy.orm import sessionmaker
 
-from engine.agent.completion import CompletionGate
+from engine.agent.artifact import ArtifactDraft, ArtifactType
+from engine.agent.completion import (
+    CompletionGate,
+    CompletionPolicy,
+    SemanticArtifactCompletionSupport,
+    SemanticCitationConstraint,
+)
 from engine.agent.definition import AgentDefinition
 from engine.agent.events import LiveStreamHub
 from engine.agent.loop import RunLoop
@@ -21,11 +27,12 @@ from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.approval import ApprovalRepository
 from engine.agent.repositories.question import QuestionRepository
 from engine.agent.question import QuestionAnswer
-from engine.tools.builtin.control import RequestClarificationCommand
+from engine.tools.builtin.control import RequestClarificationCommand, SubmitAnswerCommand
 from engine.agent.resource_refs import ProjectResourceDescriptor
 from engine.agent.turn import TurnStreamItem, TurnStreamKind, TurnTermination
 from engine.models import (
     AgentObservationRecord,
+    AgentArtifactRecord,
     AgentApproval,
     AgentQuestionRequest,
     AgentTurn,
@@ -45,6 +52,8 @@ from engine.tools.runtime import (
     ToolPresentation,
     ToolRegistry,
 )
+from engine.tools.runtime.result import ToolOutcome
+from engine.tools.runtime.semantics import ToolSemanticSpec
 from engine.tools.runtime.attempt import CompositeResourceResolver
 from engine.runtime_composition import (
     build_default_completion_policy,
@@ -92,6 +101,21 @@ class EchoTool(BaseTool[EchoInput, EchoOutput]):
 class ApprovalTool(EchoTool):
     name = "verification_approval"
     policy = ToolPolicy(requires_approval=True)
+
+
+class EvidenceTool(EchoTool):
+    name = "verification_evidence"
+    semantics = ToolSemanticSpec(produces=("verification.evidence",))
+
+    def run(self, tool_input, context):
+        del context
+        return ToolOutcome(
+            output=EchoOutput(value=tool_input.value),
+            artifacts=(ArtifactDraft(
+                key="proof", type=ArtifactType.MARKDOWN, title="Verified value",
+                payload={"content": tool_input.value},
+            ),),
+        )
 
 
 @pytest.mark.parametrize("approve_first", [True, False])
@@ -279,6 +303,297 @@ class ScriptedModel:
         yield from self.script()
 
 
+@pytest.mark.parametrize("owner", ["verification.first", "verification.second"])
+def test_rejected_local_name_can_be_corrected_without_executing_an_alias(db_session, owner):
+    with _EVENT_LOCK:
+        _EVENTS.clear()
+    registry = ToolRegistry()
+    for candidate_owner in ("verification.first", "verification.second"):
+        registry.register(EchoTool(), owner=candidate_owner)
+    canonical = next(
+        name for name in registry.tool_names() if registry.owner_of(name) == owner
+    )
+
+    def corrected_call():
+        db_session.expire_all()
+        observation = db_session.query(AgentObservationRecord).one()
+        payload = json.loads(observation.model_output_json)
+        assert payload["error_code"] == "UNKNOWN_TOOL"
+        assert canonical in payload["summary"]
+        assert "PRIVATE_REJECTED_ARGUMENT" not in observation.model_output_json
+        assert _EVENTS == []
+        yield from _tool_turn("corrected", canonical, {"value": "executed once"})
+
+    run_id = _execute(
+        db_session,
+        registry=registry,
+        scripts=(
+            lambda: _tool_turn("local-alias", "verification_echo", {"value": "PRIVATE_REJECTED_ARGUMENT"}),
+            corrected_call,
+            lambda: _answer_turn("The requested observation is complete."),
+        ),
+    )
+    invocations = db_session.query(AgentToolInvocation).filter_by(run_id=run_id).all()
+    assert sorted(item.status for item in invocations) == ["rejected", "succeeded"]
+    assert next(item for item in invocations if item.status == "rejected").input_json == "{}"
+    assert [(value, event) for value, event, _ in _EVENTS if event == "start"] == [("executed once", "start")]
+    assert db_session.get(AgentRun, run_id).status == "completed"
+
+
+@pytest.mark.parametrize("user_request", ["Summarize the file evidence.", "Report the verified change.", "解释这个已观察的结果，并引用来源。"])
+def test_admitted_delivery_requires_native_citations_without_repeating_capability_work(db_session, user_request):
+    def submit():
+        db_session.expire_all()
+        artifact = db_session.query(AgentArtifactRecord).one()
+        turn = db_session.query(AgentTurn).order_by(AgentTurn.sequence.desc()).first()
+        snapshot = json.loads(turn.context_snapshot_json)
+        assert snapshot["answer_requirements"] == {"evidence": "when_observed"}
+        assert artifact.id in snapshot["citable_artifact_ids"]
+        assert snapshot["has_observed_public_artifacts"] is True
+        assert "structured_evidence" in snapshot["run_focus"]["missing"]
+        assert snapshot["prompt_budget"]["answer_requirements_tokens"] > 0
+        yield from _tool_turn("deliver", "submit_answer", {"parts": [{"text": "Observed outcome: ready.", "citations": [artifact.id]}]})
+
+    registry = ToolRegistry().register(EvidenceTool()).register(SubmitAnswerCommand(), owner="dbfox.core", provider_name="submit_answer")
+    run_id = _execute(db_session, request=user_request,
+        request_payload={"answer_requirements": {"evidence": "when_observed"}},
+        registry=registry, allowed_tool_groups=("verification", "control"), scripts=(
+            lambda: _tool_turn("observe", "verification_evidence", {"value": "ready"}),
+            lambda: _answer_turn("The work is complete; the source was observed."), submit,
+        ))
+    run = db_session.get(AgentRun, run_id)
+    assert run.status == "completed"
+    assert len(json.loads(run.result_json)["answer"]["evidence"]) == 1
+    assert db_session.query(AgentToolInvocation).filter_by(run_id=run_id, tool_name="verification_evidence").count() == 1
+
+
+def test_required_evidence_cannot_be_replaced_by_no_source_completion_at_budget(db_session):
+    from engine.agent.run import RunLimits
+    run_id = _execute(db_session,
+        request_payload={"answer_requirements": {"evidence": "required"}},
+        registry=ToolRegistry(), limits=RunLimits(max_turns=2, finalization_turn_reserve=0),
+        scripts=(lambda: _answer_turn("Done without an observation."), lambda: _answer_turn("Still claiming completion.")))
+    assert db_session.get(AgentRun, run_id).status == "failed"
+
+
+def test_internal_observations_do_not_require_a_public_citation(db_session):
+    from engine.agent.artifact import ArtifactVisibility
+
+    class InternalTool(EvidenceTool):
+        name = "verification_internal"
+
+        def run(self, tool_input, context):
+            return ToolOutcome(output=EchoOutput(value=tool_input.value), artifacts=(ArtifactDraft(
+                key="internal", type=ArtifactType.MARKDOWN, title="Internal detail",
+                payload={"content": tool_input.value}, visibility=ArtifactVisibility.INTERNAL,
+            ),))
+
+    def answer():
+        db_session.expire_all()
+        turn = db_session.query(AgentTurn).order_by(AgentTurn.sequence.desc()).first()
+        snapshot = json.loads(turn.context_snapshot_json)
+        assert snapshot["citable_artifact_ids"] == []
+        assert snapshot["has_observed_public_artifacts"] is False
+        yield from _answer_turn("A bounded explanation without claiming a public source.")
+
+    run_id = _execute(db_session, registry=ToolRegistry().register(InternalTool()),
+        request_payload={"answer_requirements": {"evidence": "when_observed"}}, scripts=(
+            lambda: _tool_turn("internal", "verification_internal", {"value": "metadata"}), answer,
+        ))
+    assert db_session.get(AgentRun, run_id).status == "completed"
+
+
+def test_final_transaction_rejects_an_answer_swapped_after_the_completion_gate(db_session, monkeypatch):
+    from engine.agent.answer_submission import AnswerSubmission
+    original = RunLoop._complete
+    attempts = []
+
+    def complete(self, lease, run_id, result, **kwargs):
+        if not attempts:
+            tampered = result.model_copy(update={"submitted_answer": AnswerSubmission.model_validate({"parts": [
+                {"text": "A different answer after validation.", "citations": list(result.submitted_answer.cited_artifact_ids)},
+            ]})})
+            accepted = original(self, lease, run_id, tampered, **kwargs)
+            attempts.append(accepted)
+            return accepted
+        return original(self, lease, run_id, result, **kwargs)
+
+    def finish():
+        db_session.expire_all()
+        artifact = db_session.query(AgentArtifactRecord).one()
+        yield from _tool_turn(f"deliver-{len(attempts)}", "submit_answer", {"parts": [{"text": "The observed outcome.", "citations": [artifact.id]}]})
+
+    monkeypatch.setattr(RunLoop, "_complete", complete)
+    registry = ToolRegistry().register(EvidenceTool()).register(SubmitAnswerCommand(), owner="dbfox.core", provider_name="submit_answer")
+    run_id = _execute(db_session,
+        request_payload={"answer_requirements": {"evidence": "when_observed"}},
+        registry=registry, allowed_tool_groups=("verification", "control"), scripts=(
+            lambda: _tool_turn("observe", "verification_evidence", {"value": "outcome"}), finish, finish,
+        ))
+    assert attempts == [False]
+    run = db_session.get(AgentRun, run_id)
+    assert run.status == "completed"
+    assert json.loads(run.result_json)["answer"]["text"].startswith("The observed outcome.")
+
+
+def test_structured_answer_uses_real_observation_and_canonical_evidence(db_session):
+    from engine.agent.repositories.run import RunRepository
+    from engine.models import AgentEvidenceRecord, AgentRunItemRecord
+
+    def finish():
+        db_session.expire_all()
+        artifact = db_session.query(AgentArtifactRecord).filter_by(title="Verified value").one()
+        yield from _tool_turn("deliver", "submit_answer", {"parts": [
+            {"text": "**Verified count: 12.**", "citations": [artifact.id]},
+            {"text": "\n\nThis is an interpretation, not another measurement."},
+            {"text": "\n\nThe saved result remains available.", "citations": [artifact.id]},
+        ]})
+
+    registry = ToolRegistry().register(EvidenceTool()).register(SubmitAnswerCommand(), owner="dbfox.core", provider_name="submit_answer")
+    run_id = _execute(db_session, scripts=(
+        lambda: _tool_turn("measure", "verification_evidence", {"value": "12"}), finish,
+    ), registry=registry, allowed_tool_groups=("verification", "control"))
+    run = db_session.get(AgentRun, run_id)
+    assert run.status == "completed"
+    answer = json.loads(run.result_json)["answer"]
+    assert answer["text"].startswith("**Verified count: 12.**{{cite:artifact_")
+    assert [item["label"] for item in answer["evidence"]] == [
+        "**Verified count: 12.**", "The saved result remains available.",
+    ]
+    assert db_session.query(AgentEvidenceRecord).filter_by(run_id=run_id).count() == 2
+    invocation = db_session.query(AgentToolInvocation).filter_by(run_id=run_id, tool_name="submit_answer").one()
+    assert invocation.status == "succeeded"
+    turn = db_session.get(AgentTurn, invocation.turn_id)
+    assert json.loads(turn.tool_calls_json)[0]["name"] == "submit_answer"
+    assert json.loads(turn.response_items_json)[0]["type"] == "function_call"
+    assert not db_session.query(AgentRunItemRecord).filter(
+        AgentRunItemRecord.id.like(f"message:{run_id}:{turn.id}:%")
+    ).all()  # The Runtime publishes its canonical final answer, not a fake streamed message.
+    restored = RunRepository(db_session).latest_completed_answer(run_id)
+    assert restored.submitted_answer is not None
+    assert restored.answer_text == answer["text"]
+
+
+@pytest.mark.parametrize("invalid", ["missing_source", "raw_markup", "fabricated_authority", "mixed_batch"])
+def test_invalid_structured_submission_is_rejected_then_repairable(db_session, invalid):
+    def bad():
+        payload = {"parts": [{"text": "Claim.", "citations": ["artifact_missing"]}]}
+        if invalid == "raw_markup":
+            payload = {"parts": [{"text": "Claim.{{cite:artifact_missing}}"}]}
+        elif invalid == "fabricated_authority":
+            payload = {"parts": [{"text": "Claim."}], "success": True}
+        elif invalid == "mixed_batch":
+            payload = {"parts": [{"text": "Premature answer."}]}
+        yield from _tool_turn("bad", "submit_answer", payload, finish=invalid != "mixed_batch")
+        if invalid == "mixed_batch":
+            yield from _tool_turn("work", "verification_echo", {"value": "actual work"}, index=1)
+
+    def repair():
+        db_session.expire_all()
+        rejected = db_session.query(AgentToolInvocation).filter_by(provider_call_id="bad").one()
+        assert rejected.status == "rejected"
+        assert db_session.get(AgentRun, rejected.run_id).status != "completed"
+        yield from _tool_turn("good", "submit_answer", {"parts": [{"text": "A bounded explanation without invented resource facts."}]})
+
+    registry = ToolRegistry().register(EchoTool()).register(SubmitAnswerCommand(), owner="dbfox.core", provider_name="submit_answer")
+    run_id = _execute(db_session, scripts=(bad, repair), registry=registry, allowed_tool_groups=("verification", "control"))
+    assert db_session.get(AgentRun, run_id).status == "completed"
+    assert json.loads(db_session.get(AgentRun, run_id).result_json)["answer"]["evidence"] == []
+
+
+def test_submission_cannot_complete_an_unfinished_plan(db_session):
+    from engine.tools.builtin.control import UpdatePlanCommand
+
+    def repair():
+        db_session.expire_all()
+        run = db_session.query(AgentRun).one()
+        assert run.status == "running"
+        assert "settled_plan" in run.result_json
+        yield from _tool_turn("settle", "update_plan", {
+            "objective": "Explain a concept", "steps": [{"id": "explain", "title": "Explain", "status": "completed"}],
+        })
+
+    registry = ToolRegistry().register(UpdatePlanCommand(), owner="dbfox.core", provider_name="update_plan").register(
+        SubmitAnswerCommand(), owner="dbfox.core", provider_name="submit_answer",
+    )
+    run_id = _execute(db_session, scripts=(
+        lambda: _tool_turn("plan", "update_plan", {
+            "objective": "Explain a concept", "steps": [{"id": "explain", "title": "Explain", "status": "pending"}],
+        }),
+        lambda: _tool_turn("premature", "submit_answer", {"parts": [{"text": "A concept explanation."}]}),
+        repair,
+        lambda: _tool_turn("final", "submit_answer", {"parts": [{"text": "The concept explained."}]}),
+    ), registry=registry, allowed_tool_groups=("control",))
+    assert db_session.get(AgentRun, run_id).status == "completed"
+
+
+def test_structured_submission_cannot_reference_another_session(db_session):
+    registry = ToolRegistry().register(EvidenceTool()).register(SubmitAnswerCommand(), owner="dbfox.core", provider_name="submit_answer")
+    _execute(db_session, session_id="other-session", registry=registry, scripts=(
+        lambda: _tool_turn("source", "verification_evidence", {"value": "private result"}),
+        lambda: _answer_turn("The result was created."),
+    ))
+    artifact = db_session.query(AgentArtifactRecord).one()
+
+    def repair():
+        db_session.expire_all()
+        assert db_session.query(AgentToolInvocation).filter_by(provider_call_id="foreign").one().status == "rejected"
+        yield from _answer_turn("I cannot use that source in this session.")
+
+    run_id = _execute(db_session, session_id="current-session", registry=registry,
+        allowed_tool_groups=("verification", "control"), scripts=(
+            lambda: _tool_turn("foreign", "submit_answer", {"parts": [{"text": "A claim.", "citations": [artifact.id]}]}),
+            repair,
+        ))
+    assert json.loads(db_session.get(AgentRun, run_id).result_json)["answer"]["evidence"] == []
+
+
+def test_submission_survives_a_worker_stop_before_terminalization(db_session, monkeypatch):
+    from engine.agent.repositories.run import RunRepository
+
+    class WorkerStopped(Exception):
+        pass
+
+    def stop_before_completion(self, *args, **kwargs):
+        raise WorkerStopped()
+
+    with monkeypatch.context() as patch:
+        patch.setattr(RunLoop, "_complete", stop_before_completion)
+        with pytest.raises(WorkerStopped):
+            _execute(db_session, registry=ToolRegistry().register(
+                SubmitAnswerCommand(), owner="dbfox.core", provider_name="submit_answer",
+            ), allowed_tool_groups=("control",), scripts=(
+                lambda: _tool_turn("candidate", "submit_answer", {"parts": [{"text": "A complete explanation."}]}),
+            ))
+    db_session.expire_all()
+    run = db_session.query(AgentRun).one()
+    assert run.status == "running"
+    recovered = RunRepository(db_session).latest_completed_answer(str(run.id))
+    assert recovered.answer_text == "A complete explanation."
+    assert recovered.submitted_answer is not None
+    assert not recovered.messages and not recovered.tool_calls
+    assert db_session.query(AgentToolInvocation).filter_by(run_id=run.id).count() == 1
+
+
+def test_cancellation_after_submission_cannot_publish_success(db_session, monkeypatch):
+    original = RunLoop._complete
+
+    def cancel_then_complete(self, lease, run_id, result, **kwargs):
+        row = db_session.get(AgentRun, run_id)
+        row.cancel_requested = True
+        db_session.commit()
+        return original(self, lease, run_id, result, **kwargs)
+
+    monkeypatch.setattr(RunLoop, "_complete", cancel_then_complete)
+    # The checkpoint after the rejected final transaction owns cancellation.
+    run_id = _execute(db_session, registry=ToolRegistry().register(
+        SubmitAnswerCommand(), owner="dbfox.core", provider_name="submit_answer",
+    ), allowed_tool_groups=("control",), scripts=(
+        lambda: _tool_turn("candidate", "submit_answer", {"parts": [{"text": "A complete explanation."}]}),
+    ))
+    assert db_session.get(AgentRun, run_id).status == "cancelled"
+
+
 def _execute(
     db_session,
     *,
@@ -291,6 +606,9 @@ def _execute(
     resource_resolver=None,
     allowed_tool_groups=("verification",),
     limits=None,
+    completion=None,
+    request="Exercise the real Agent loop.",
+    request_payload=None,
 ):
     if project_id is not None:
         db_session.add(Project(id=project_id, name=f"Project {project_id}"))
@@ -313,12 +631,12 @@ def _execute(
                 ),
             )
         ),
-        content="Exercise the real Agent loop.",
+        content=request,
         idempotency_key=session_id,
         llm_credential_id="verification-credential",
         api_base=None,
         model_name="verification-model",
-        request_payload={},
+        request_payload=request_payload or {},
     )
     lease = sessions.claim(session_id=session_id, owner="verification-worker", ttl_seconds=120)
     assert lease is not None
@@ -334,7 +652,7 @@ def _execute(
         model_factory=model_factory,
         registry=registry,
         context_contributors=default_context_contributors(),
-        completion=CompletionGate(build_default_completion_policy()),
+        completion=completion or CompletionGate(build_default_completion_policy()),
         definition=AgentDefinition(allowed_tool_groups=allowed_tool_groups, **({"limits": limits} if limits is not None else {})),
         live_stream=LiveStreamHub(),
         resource_providers=resource_providers,
@@ -342,6 +660,96 @@ def _execute(
     ).execute(lease=lease, run_id=admission.run_id)
     db_session.expire_all()
     return admission.run_id
+
+
+@pytest.mark.parametrize("valid_final_answer", [False, True])
+def test_stalled_answer_gets_one_finalization_attempt_without_repeating_work(
+    db_session, valid_final_answer,
+):
+    def finish():
+        db_session.expire_all()
+        artifact = db_session.query(AgentArtifactRecord).filter_by(title="Verified value").one()
+        turn = db_session.query(AgentTurn).order_by(AgentTurn.sequence.desc()).first()
+        focus = json.loads(turn.context_snapshot_json)["run_focus"]
+        assert focus["kind"] == "synthesize"
+        assert artifact.id in focus["reason"]
+        assert "verification_evidence" not in turn.tool_materialization_json
+        text = "Verified value: 12."
+        if valid_final_answer:
+            text += "{{cite:" + artifact.id + "}}"
+        yield from _answer_turn(text)
+
+    run_id = _execute(
+        db_session,
+        scripts=(
+            lambda: _tool_turn("proof", "verification_evidence", {"value": "12"}),
+            lambda: _answer_turn("Verified value: 12."),
+            lambda: _answer_turn("Verified value: 12."),
+            finish,
+        ),
+        registry=ToolRegistry().register(EvidenceTool()),
+        completion=CompletionGate(CompletionPolicy(
+            constraints=(SemanticCitationConstraint("proof-citation", "verification.evidence"),),
+            supports=(SemanticArtifactCompletionSupport("proof-support", "verification.evidence"),),
+        )),
+    )
+    run = db_session.get(AgentRun, run_id)
+    assert run.status == ("completed" if valid_final_answer else "failed")
+    if not valid_final_answer:
+        assert run.error_code == "AGENT_NO_PROGRESS"
+        # A resumed worker derives the same monotonic phase from Run.focus.
+        assert json.loads(run.result_json)["focus"]["kind"] == "synthesize"
+    invocation = db_session.query(AgentToolInvocation).filter_by(run_id=run_id).one()
+    assert invocation.status == "succeeded"
+    assert db_session.query(AgentArtifactRecord).filter_by(run_id=run_id, title="Verified value").count() == 1
+    assert db_session.query(AgentTurn).filter_by(run_id=run_id).count() == 4
+
+
+@pytest.mark.parametrize("goal", [
+    "Compute and verify the requested result.",
+    "Modify the project and verify the change.",
+    "检查来源，核实结论并报告。",
+])
+def test_declared_work_is_completed_before_the_real_loop_can_deliver(db_session, goal):
+    from engine.tools.builtin.control import UpdatePlanCommand
+    registry = ToolRegistry().register(EvidenceTool()).register(
+        UpdatePlanCommand(), owner="dbfox.core", provider_name="update_plan",
+    )
+    steps = [
+        {"id": "perform", "title": "Perform the requested work", "status": "in_progress", "evidence_required": True},
+        {"id": "report", "title": "Verify and report", "status": "pending"},
+    ]
+
+    def perform():
+        db_session.expire_all()
+        turn = db_session.query(AgentTurn).order_by(AgentTurn.sequence.desc()).first()
+        snapshot = json.loads(turn.context_snapshot_json)
+        assert snapshot["task_plan"]["version"] == 1
+        assert snapshot["task_plan"]["steps"][1]["status"] == "pending"
+        assert snapshot["prompt_budget"]["task_plan_tokens"] > 0
+        yield from _tool_turn("proof", "verification_evidence", {"value": "12"})
+
+    def settle_plan():
+        db_session.expire_all()
+        artifact = db_session.query(AgentArtifactRecord).filter_by(title="Verified value").one()
+        yield from _tool_turn("settle", "update_plan", {"objective": goal, "steps": [
+            {**steps[0], "status": "completed", "artifact_ids": [artifact.id]},
+            {**steps[1], "status": "completed"},
+        ]})
+
+    def answer():
+        db_session.expire_all()
+        artifact = db_session.query(AgentArtifactRecord).filter_by(title="Verified value").one()
+        yield from _answer_turn("The verified result is 12.{{cite:" + artifact.id + "}}")
+
+    run_id = _execute(
+        db_session, registry=registry, request=goal, allowed_tool_groups=("verification", "control"),
+        scripts=(lambda: _tool_turn("declare", "update_plan", {"objective": goal, "steps": steps}),
+                 lambda: _answer_turn("Everything is complete."), perform, settle_plan, answer),
+    )
+    assert db_session.get(AgentRun, run_id).status == "completed"
+    assert db_session.query(AgentTurn).filter_by(run_id=run_id).count() == 5
+    assert db_session.query(AgentToolInvocation).filter_by(run_id=run_id, tool_name="verification_evidence").count() == 1
 
 
 @pytest.mark.parametrize("after_successful_tool", [False, True])

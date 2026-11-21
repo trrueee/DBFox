@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from engine.agent.answer_requirements import AnswerRequirements
 from engine.agent.resource_refs import MAX_INPUT_RESOURCE_REFS, RequestedResourceRef
 from engine.agent.references import (
     MAX_INPUT_REFERENCES,
@@ -51,6 +52,7 @@ class ConversationInputRequest(BaseModel):
     llm_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
     api_base: str | None = Field(default=None, max_length=2048)
     model_name: str | None = Field(default=None, max_length=256)
+    answer_requirements: AnswerRequirements | None = None
 
 
 class ArtifactSelectionRequest(BaseModel):
