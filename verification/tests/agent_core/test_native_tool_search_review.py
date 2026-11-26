@@ -92,6 +92,8 @@ def _coordinator(db_session, registry, handler, *, model="gpt-5.4", limits=None)
 
 @pytest.mark.parametrize("forged", [False, True], ids=["approval-still-required", "search-cannot-invent-authority"])
 def test_hosted_search_does_not_grant_execution_authority(db_session, forged):
+    from engine.agent.run import RunLimits
+
     requests = []
     name = "unregistered_review_tool" if forged else "review_probe"
 
@@ -117,7 +119,10 @@ def test_hosted_search_does_not_grant_execution_authority(db_session, forged):
                                                                "annotations": [], "logprobs": []}]}]
         return _stream_response(items, payload["tools"])
 
-    coordinator, run_id = _coordinator(db_session, ToolRegistry().register(ReviewProbe()), handler)
+    coordinator, run_id = _coordinator(
+        db_session, ToolRegistry().register(ReviewProbe()), handler,
+        limits=RunLimits(max_turns=2),
+    )
     try:
         coordinator._drain_session("review-session", Event())
     finally:
@@ -129,6 +134,8 @@ def test_hosted_search_does_not_grant_execution_authority(db_session, forged):
         assert invocation.error_code == "UNKNOWN_TOOL"
         assert invocation.status != "succeeded"
         assert len(requests) == 2
+        assert run.status == "failed"
+        assert run.error_code == "AGENT_INCOMPLETE"
     else:
         assert run.status == "waiting_approval"
         assert invocation.status == "waiting_approval"

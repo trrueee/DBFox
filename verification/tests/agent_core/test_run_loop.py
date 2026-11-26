@@ -376,6 +376,59 @@ def test_required_evidence_cannot_be_replaced_by_no_source_completion_at_budget(
     assert db_session.get(AgentRun, run_id).status == "failed"
 
 
+def test_valid_delivery_on_the_last_allowed_turn_is_complete(db_session):
+    from engine.agent.run import RunLimits
+
+    def submit():
+        db_session.expire_all()
+        source = db_session.query(AgentArtifactRecord).one()
+        yield from _tool_turn("deliver", "submit_answer", {
+            "parts": [{"text": "The observed value is 12.", "citations": [source.id]}],
+        })
+
+    registry = ToolRegistry().register(EvidenceTool()).register(
+        SubmitAnswerCommand(), owner="dbfox.core", provider_name="submit_answer",
+    )
+    run_id = _execute(
+        db_session, registry=registry, allowed_tool_groups=("verification", "control"),
+        request_payload={"answer_requirements": {"evidence": "required"}},
+        scripts=(lambda: _tool_turn("measure", "verification_evidence", {"value": "12"}), submit),
+        limits=RunLimits(max_turns=2, finalization_turn_reserve=0),
+    )
+    run = db_session.get(AgentRun, run_id)
+    assert run.status == "completed"
+    result = json.loads(run.result_json)
+    assert result["completion_disposition"] == "complete"
+    assert result["limitation_codes"] == []
+    assert len(result["answer"]["evidence"]) == 1
+
+
+def test_budget_cannot_promote_an_answer_rejected_before_later_tool_work(db_session):
+    from engine.agent.repositories.run import RunRepository
+    from engine.agent.run import RunLimits
+    from engine.tools.builtin.control import UpdatePlanCommand
+
+    def plan(call_id, status):
+        yield from _tool_turn(call_id, "update_plan", {
+            "objective": "Verify the requested work",
+            "steps": [{"id": "check", "title": "Check the output", "status": status}],
+        })
+
+    premature = "All requested work was already verified."
+    run_id = _execute(
+        db_session, registry=ToolRegistry().register(UpdatePlanCommand(), owner="dbfox.core", provider_name="update_plan"),
+        allowed_tool_groups=("control",),
+        scripts=(lambda: plan("declare", "pending"), lambda: _answer_turn(premature),
+                 lambda: plan("close", "completed")),
+        limits=RunLimits(max_turns=3, max_stalled_turns=4, finalization_turn_reserve=0),
+    )
+    run = db_session.get(AgentRun, run_id)
+    assert db_session.query(AgentTurn).filter_by(run_id=run_id).count() == 3
+    assert run.status == "failed"
+    assert premature not in run.result_json
+    assert not RunRepository(db_session).latest_completed_answer(run_id).has_completed_answer_candidate
+
+
 def test_internal_observations_do_not_require_a_public_citation(db_session):
     from engine.agent.artifact import ArtifactVisibility
 
@@ -502,6 +555,7 @@ def test_invalid_structured_submission_is_rejected_then_repairable(db_session, i
 
 
 def test_submission_cannot_complete_an_unfinished_plan(db_session):
+    from engine.agent.run import RunLimits
     from engine.tools.builtin.control import UpdatePlanCommand
 
     def repair():
@@ -523,7 +577,7 @@ def test_submission_cannot_complete_an_unfinished_plan(db_session):
         lambda: _tool_turn("premature", "submit_answer", {"parts": [{"text": "A concept explanation."}]}),
         repair,
         lambda: _tool_turn("final", "submit_answer", {"parts": [{"text": "The concept explained."}]}),
-    ), registry=registry, allowed_tool_groups=("control",))
+    ), registry=registry, allowed_tool_groups=("control",), limits=RunLimits(max_stalled_turns=3))
     assert db_session.get(AgentRun, run_id).status == "completed"
 
 
@@ -662,9 +716,32 @@ def _execute(
     return admission.run_id
 
 
+def test_incomplete_provider_output_stops_without_replay_and_charges_reported_usage(db_session):
+    def incomplete():
+        yield TurnStreamItem(kind=TurnStreamKind.USAGE, item_id="usage", revision=1, usage={
+            "prompt_tokens": 100, "completion_tokens": 2048, "total_tokens": 2148,
+        })
+        yield TurnStreamItem(kind=TurnStreamKind.ERROR, item_id="error", revision=1,
+                             error_code="MODEL_PROVIDER_INCOMPLETE", error_message="Model output was incomplete.",
+                             error_retryable=False)
+
+    run_id = _execute(db_session, scripts=[incomplete], registry=ToolRegistry().register(EchoTool()))
+    run = db_session.get(AgentRun, run_id)
+    assert run.status == "failed"
+    assert run.error_code == "MODEL_PROVIDER_INCOMPLETE"
+    assert run.consumed_input_tokens == 100
+    assert run.consumed_output_tokens == 2048
+    assert run.consumed_tokens == 2148
+    assert db_session.query(AgentToolInvocation).filter_by(run_id=run_id).count() == 0
+    turns = db_session.query(AgentTurn).filter_by(run_id=run_id).all()
+    assert len(turns) == 1 and turns[0].error_code == "MODEL_PROVIDER_INCOMPLETE"
+    assert json.loads(turns[0].usage_json)["completion_tokens"] == 2048
+
+
 @pytest.mark.parametrize("valid_final_answer", [False, True])
+@pytest.mark.parametrize("domain_partial_support", [False, True])
 def test_stalled_answer_gets_one_finalization_attempt_without_repeating_work(
-    db_session, valid_final_answer,
+    db_session, valid_final_answer, domain_partial_support,
 ):
     def finish():
         db_session.expire_all()
@@ -690,19 +767,80 @@ def test_stalled_answer_gets_one_finalization_attempt_without_repeating_work(
         registry=ToolRegistry().register(EvidenceTool()),
         completion=CompletionGate(CompletionPolicy(
             constraints=(SemanticCitationConstraint("proof-citation", "verification.evidence"),),
-            supports=(SemanticArtifactCompletionSupport("proof-support", "verification.evidence"),),
+            supports=((SemanticArtifactCompletionSupport("proof-support", "verification.evidence"),)
+                      if domain_partial_support else ()),
         )),
     )
     run = db_session.get(AgentRun, run_id)
     assert run.status == ("completed" if valid_final_answer else "failed")
     if not valid_final_answer:
-        assert run.error_code == "AGENT_NO_PROGRESS"
+        assert run.error_code == "AGENT_DELIVERY_INCOMPLETE"
+        assert "交付校验" in run.error_message
         # A resumed worker derives the same monotonic phase from Run.focus.
         assert json.loads(run.result_json)["focus"]["kind"] == "synthesize"
     invocation = db_session.query(AgentToolInvocation).filter_by(run_id=run_id).one()
     assert invocation.status == "succeeded"
     assert db_session.query(AgentArtifactRecord).filter_by(run_id=run_id, title="Verified value").count() == 1
     assert db_session.query(AgentTurn).filter_by(run_id=run_id).count() == 4
+
+
+@pytest.mark.parametrize(("has_evidence", "evidence_requirement"), [
+    (False, None), (True, None), (True, "when_observed"), (True, "required"),
+])
+def test_stalled_run_never_publishes_a_claim_about_a_failed_action(db_session, has_evidence, evidence_requirement):
+    scripts = [lambda: _tool_turn("failed", "verification_echo", {})]
+    if has_evidence:
+        scripts.insert(0, lambda: _tool_turn("proof", "verification_evidence", {"value": "12"}))
+    scripts.extend([lambda: _answer_turn("The requested operation succeeded.")] * 4)
+
+    run_id = _execute(
+        db_session,
+        scripts=scripts,
+        registry=ToolRegistry().register(EchoTool()).register(EvidenceTool()),
+        request_payload={"answer_requirements": {"evidence": evidence_requirement}} if evidence_requirement else None,
+    )
+
+    run = db_session.get(AgentRun, run_id)
+    assert "The requested operation succeeded." not in run.result_json
+    if evidence_requirement:
+        assert run.status == "failed"
+        assert run.error_code == "AGENT_DELIVERY_INCOMPLETE"
+        assert db_session.query(AgentArtifactRecord).filter_by(run_id=run_id, title="Verified value").count() == 1
+        # The initial success and failure each add a distinct durable observation.
+        # Two stalled turns then exhaust the default no-progress budget.
+        assert db_session.query(AgentTurn).filter_by(run_id=run_id).count() == 4
+    elif has_evidence:
+        assert run.status == "completed"
+        assert json.loads(run.result_json)["completion_disposition"] == "bounded_partial"
+        assert "本次已生成 1 项成果" in run.result_json
+    else:
+        assert run.status == "failed"
+        assert run.error_code == "AGENT_NO_PROGRESS"
+
+
+def test_tool_limit_keeps_a_result_settled_in_the_same_turn(db_session):
+    from engine.agent.run import RunLimits
+
+    def calls():
+        yield from _tool_turn("proof", "verification_evidence", {"value": "12"}, finish=False)
+        yield from _tool_turn("unadmitted", "verification_echo", {"value": "later"}, index=1)
+
+    run_id = _execute(
+        db_session,
+        scripts=(calls,),
+        registry=ToolRegistry().register(EvidenceTool()).register(EchoTool()),
+        limits=RunLimits(max_tool_invocations=1),
+        completion=CompletionGate(CompletionPolicy(constraints=(), supports=(
+            SemanticArtifactCompletionSupport("proof-support", "verification.evidence"),
+        ))),
+    )
+
+    run = db_session.get(AgentRun, run_id)
+    result = json.loads(run.result_json)
+    assert run.status == "completed"
+    assert result["completion_disposition"] == "bounded_partial"
+    assert result["limitation_codes"] == ["TOOL_BUDGET_REACHED"]
+    assert db_session.query(AgentToolInvocation).filter_by(run_id=run_id).count() == 1
 
 
 @pytest.mark.parametrize("goal", [
@@ -799,6 +937,23 @@ def test_context_budget_failure_is_durable_before_or_after_resource_discovery(
     assert all(turn.status == "completed" for turn in turns)
     assert all(invocation.status == "succeeded" for invocation in invocations)
     assert all(observation.status == "succeeded" for observation in observations)
+
+
+def test_oversized_active_request_fails_before_any_model_turn(db_session):
+    from engine.agent.run import RunLimits
+
+    request = "整理以下资料：" + "逐条核对。" * 2_000 + "最后只输出缺失记录，不修改源数据。"
+    run_id = _execute(
+        db_session,
+        scripts=(lambda: _answer_turn("The requested work is complete."),),
+        registry=ToolRegistry(),
+        request=request,
+        limits=RunLimits(max_prompt_tokens=8_192),
+    )
+    run = db_session.get(AgentRun, run_id)
+    assert run.status == "failed"
+    assert run.error_code == "AGENT_CONTEXT_BUDGET_EXCEEDED"
+    assert db_session.query(AgentTurn).filter_by(run_id=run_id).count() == 0
 
 
 def test_repeated_plan_rewording_stops_the_real_loop_without_task_evidence(db_session):
@@ -933,6 +1088,8 @@ def test_project_resource_discovery_materializes_domain_tool_and_binds_invocatio
 def test_project_resource_invocation_rejects_identity_outside_discovery_ceiling(
     db_session,
 ):
+    from engine.agent.run import RunLimits
+
     access_log: list[str] = []
 
     def provider(_db, _project_id):
@@ -957,6 +1114,7 @@ def test_project_resource_invocation_rejects_identity_outside_discovery_ceiling(
         scripts=(call, lambda: _answer_turn("Resource B is unavailable.")),
         registry=ToolRegistry().register(ResourceProbeTool(access_log)),
         session_id="agent-core-resource-denied",
+        limits=RunLimits(max_turns=2),
         project_id="project-resource-denied",
         resource_refs=(),
         resource_providers=(provider,),
@@ -967,3 +1125,6 @@ def test_project_resource_invocation_rejects_identity_outside_discovery_ceiling(
     assert invocation.status == "rejected"
     assert invocation.resource_refs_json == "[]"
     assert access_log == []
+    run = db_session.get(AgentRun, run_id)
+    assert run.status == "failed"
+    assert run.error_code == "AGENT_INCOMPLETE"

@@ -728,6 +728,27 @@ def test_responses_adapter_rejects_terminal_incomplete_response() -> None:
         )
 
 
+def test_responses_adapter_rejects_completed_without_output_and_preserves_reported_usage() -> None:
+    client = _Client([_event({
+        "type": "response.completed", "sequence_number": 1,
+        "response": _response(status="completed", usage={
+            "input_tokens": 100, "output_tokens": 2048, "total_tokens": 2148,
+            "input_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0},
+            "output_tokens_details": {"reasoning_tokens": 0},
+        }),
+    })])
+    items = list(OpenAIModelAdapter(
+        client=client, model_name="verification-model",  # type: ignore[arg-type]
+    ).stream(messages=[{"role": "user", "content": "Create a file."}], tools=[]))
+    assert items[-1].error_code == "MODEL_PROVIDER_INCOMPLETE"
+    assert items[-1].error_retryable is False
+    with pytest.raises(TurnStreamError) as caught:
+        TurnStreamAssembler().consume(items)
+    assert caught.value.usage["completion_tokens"] == 2048
+    assert caught.value.usage["prompt_tokens"] == 100
+    assert client.responses.stream is not None and client.responses.stream.closed
+
+
 def test_responses_adapter_rejects_stream_without_terminal_event() -> None:
     client = _Client(
         [

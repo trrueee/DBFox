@@ -338,7 +338,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   cancelRun: async (runId) => {
     const run = findRun(get(), runId);
     if (!run) return;
-    const cancelled = await cancelConversationRun(runId);
+    const cancelled = await cancelConversationRun(run.session_id, runId);
     set((state) => upsertRun(state, run.session_id, {
       ...run,
       status: cancelled.status as ConversationRun["status"],
@@ -355,6 +355,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     if (!run || !approval) return;
     const afterSequence = get().detailById[run.session_id]?.cursor || 0;
     await resolveConversationApproval(
+      run.session_id,
       approvalId,
       approval.payload.version,
       approved,
@@ -368,7 +369,12 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     const question = findItem<QuestionItem>(get(), questionId, "question");
     if (!run || !question) return;
     const afterSequence = get().detailById[run.session_id]?.cursor || 0;
-    await resolveConversationQuestion(questionId, question.payload.version, response);
+    await resolveConversationQuestion(
+      run.session_id,
+      questionId,
+      question.payload.version,
+      response,
+    );
     void followRun(get, run.session_id, runId, afterSequence);
   },
 

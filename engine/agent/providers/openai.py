@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
 import re
 import time
@@ -12,7 +11,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
+from openai import AsyncOpenAI
 from openai.types.responses import (
     ResponseCompletedEvent,
     ResponseErrorEvent,
@@ -33,6 +32,14 @@ from openai.types.responses import (
     ResponseTextDeltaEvent,
 )
 
+from engine.agent.providers.plumbing import (
+    ProviderProtocolError,
+    ProviderWatchdogTimeout,
+    await_provider_request,
+    classify_provider_failure,
+    close_async_resource,
+    next_event_or_cancel,
+)
 from engine.agent.turn import (
     ModelStreamTimeouts,
     TurnStreamCancelled,
@@ -49,23 +56,16 @@ from engine.app.safe_errors import (
 from engine.llm.config import LlmConfig
 from engine.llm.providers.openai import (
     ProviderFailure,
-    classify_openai_status_error,
-    create_openai_responses_async_client,
-    provider_failure,
+    create_openai_async_client,
 )
 
 logger = logging.getLogger("dbfox.agent.provider.openai")
 MAX_ANSWER_DELTA_CHARS = 96
 
 
-class ResponsesProtocolError(RuntimeError):
+class ResponsesProtocolError(ProviderProtocolError):
     """Raised when a typed Responses stream violates its documented lifecycle."""
 
-
-class ProviderWatchdogTimeout(TimeoutError):
-    def __init__(self, code: FixedErrorCode) -> None:
-        super().__init__(fixed_error_detail(code)["message"])
-        self.code = code
 
 
 @dataclass
@@ -427,6 +427,12 @@ class _ResponsesEventTranslator:
             )
         if self.reasoning_started and not self.reasoning_ended:
             yield self._end_reasoning()
+        # Some compatible endpoints label a length-limited, unparseable tool
+        # response "completed" with no output at all. It is not a completed
+        # model Turn. Preserve the reported usage, then fail as incomplete.
+        if not event.response.output:
+            yield self._response_error(code=FixedErrorCode.MODEL_PROVIDER_INCOMPLETE)
+            return
         self.terminal = True
         yield self._emit(
             TurnStreamKind.FINISH,
@@ -455,6 +461,8 @@ class _ResponsesEventTranslator:
 
 class OpenAIModelAdapter:
     """Lower official Responses SDK events into DBFox's provider-neutral Turn stream."""
+
+    provider_id = "openai-responses"
 
     @staticmethod
     def prepare_tools(
@@ -497,7 +505,7 @@ class OpenAIModelAdapter:
     @classmethod
     def from_config(cls, config: LlmConfig) -> "OpenAIModelAdapter":
         return cls(
-            client=create_openai_responses_async_client(
+            client=create_openai_async_client(
                 api_key=config.api_key,
                 api_base=config.api_base,
             ),
@@ -547,7 +555,7 @@ class OpenAIModelAdapter:
         try:
             events = cast(
                 AsyncIterator[Any],
-                runner.run(_await_provider_request(
+                runner.run(await_provider_request(
                     self.client.responses.create(**request), cancellation_probe,
                     timeout_seconds=min(stream_timeouts.request_seconds,
                                         max(0.01, turn_deadline - time.monotonic())),
@@ -568,7 +576,7 @@ class OpenAIModelAdapter:
                         else stream_timeouts.idle_seconds
                     )
                     event = runner.run(
-                        _next_event_or_cancel(
+                        next_event_or_cancel(
                             iterator,
                             cancellation_probe,
                             timeout_seconds=min(phase_timeout, remaining),
@@ -592,96 +600,22 @@ class OpenAIModelAdapter:
                 operation=SafeLogOperation.AGENT_MODEL_PROVIDER_STREAM,
                 exc=exc,
             )
-            yield translator.failed_stream_item(_classify_provider_failure(exc))
+            yield translator.failed_stream_item(classify_provider_failure(exc))
         finally:
             if events is not None:
                 with suppress(Exception):
-                    runner.run(_close_async_resource(events))
+                    runner.run(close_async_resource(events))
             if self._owns_client:
                 with suppress(Exception):
-                    runner.run(_close_async_resource(self.client))
+                    runner.run(close_async_resource(self.client))
             runner.close()
 
 
-async def _await_provider_request(
-    request: Any,
-    cancellation_probe: Callable[[], bool] | None,
+def project_responses_tools(
     *,
-    timeout_seconds: float,
-) -> Any:
-    """Await request admission/response headers with cancellation and a deadline."""
+    model_name: str | None,
+    tools: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Project a frozen tool inventory for the Responses protocol."""
 
-    task: asyncio.Future[Any] = asyncio.ensure_future(request)
-    deadline = asyncio.get_running_loop().time() + max(0.01, timeout_seconds)
-    try:
-        while True:
-            if cancellation_probe and cancellation_probe():
-                task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await task
-                raise TurnStreamCancelled("Model provider request was cancelled")
-            remaining = deadline - asyncio.get_running_loop().time()
-            if remaining <= 0:
-                raise ProviderWatchdogTimeout(
-                    FixedErrorCode.MODEL_PROVIDER_REQUEST_TIMEOUT
-                )
-            done, _pending = await asyncio.wait({task}, timeout=min(0.05, remaining))
-            if done:
-                return task.result()
-    finally:
-        if not task.done():
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-
-
-async def _next_event_or_cancel(
-    events: AsyncIterator[Any],
-    cancellation_probe: Callable[[], bool] | None,
-    *,
-    timeout_seconds: float,
-    timeout_code: FixedErrorCode,
-) -> Any:
-    task: asyncio.Future[Any] = asyncio.ensure_future(anext(events))
-    deadline = asyncio.get_running_loop().time() + max(0.01, timeout_seconds)
-    try:
-        while True:
-            if cancellation_probe and cancellation_probe():
-                task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await task
-                raise TurnStreamCancelled("Model provider stream was cancelled")
-            remaining = deadline - asyncio.get_running_loop().time()
-            if remaining <= 0:
-                raise ProviderWatchdogTimeout(timeout_code)
-            done, _pending = await asyncio.wait({task}, timeout=min(0.05, remaining))
-            if done:
-                return task.result()
-    finally:
-        if not task.done():
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-
-
-async def _close_async_resource(resource: object) -> None:
-    close = getattr(resource, "close", None) or getattr(resource, "aclose", None)
-    if not callable(close):
-        return
-    result = close()
-    if inspect.isawaitable(result):
-        await result
-
-
-def _classify_provider_failure(exc: Exception) -> ProviderFailure:
-    if isinstance(exc, ProviderWatchdogTimeout):
-        return provider_failure(exc.code, True)
-    if isinstance(exc, APITimeoutError):
-        return provider_failure(FixedErrorCode.MODEL_PROVIDER_TIMEOUT, True)
-    if isinstance(exc, APIConnectionError):
-        return provider_failure(FixedErrorCode.MODEL_PROVIDER_UNAVAILABLE, True)
-    if isinstance(exc, APIStatusError):
-        return classify_openai_status_error(exc)
-    if isinstance(exc, ResponsesProtocolError):
-        return provider_failure(FixedErrorCode.MODEL_PROVIDER_PROTOCOL_ERROR, False)
-    return provider_failure(FixedErrorCode.MODEL_PROVIDER_STREAM_FAILED, False)
+    return OpenAIModelAdapter.prepare_tools(model_name=model_name, tools=tools)

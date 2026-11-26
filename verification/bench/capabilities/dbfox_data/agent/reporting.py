@@ -168,8 +168,7 @@ def summarize(
             "scored": len(group_scored),
             "passed": group_passed,
             "success_rate": group_passed / len(group_scored) if group_scored else None,
-            "all_repetitions_passed": bool(group_scored)
-            and group_passed == len(group_scored),
+            "all_repetitions_passed": bool(items) and group_passed == len(items),
             "turns": distribution(item.trace.turn_count for item in items),
             "input_tokens": distribution(item.trace.input_tokens for item in items),
             "tool_schema_tokens": distribution(

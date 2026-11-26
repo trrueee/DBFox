@@ -270,6 +270,7 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
     consumed_tokens = Column(Integer, nullable=False, default=0, server_default="0")
     consumed_cost_usd = Column(Float, nullable=False, default=0.0, server_default="0")
     provider_retry_count = Column(Integer, nullable=False, default=0, server_default="0")
+    recovery_count = Column(Integer, nullable=False, default=0, server_default="0")
     repair_attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     current_step_name = Column(String, nullable=True)
     waiting_approval_id = Column(String, nullable=True)

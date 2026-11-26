@@ -25,7 +25,6 @@ class ExecutionAuthority(BaseModel):
     invocation_id: str
     tool_name: str
     authorized_input_hash: str
-    policy_fingerprint: str
     approval_subject_fingerprint: str | None = None
     resource_ref: ResourceScopeRef | None = None
 

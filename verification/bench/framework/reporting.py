@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import UTC, datetime
 import hashlib
 import json
@@ -15,6 +16,11 @@ from typing import Any
 from verification.bench.framework.schema import SuiteManifest
 from verification.bench.framework.statistics import distribution, wilson_interval
 from verification.bench.framework.trial import TrialOutcome
+
+
+def all_trials_passed(summary: Mapping[str, Any]) -> bool:
+    """Only a nonempty run with a pass for every reported trial may gate a release."""
+    return summary["trials"] > 0 and summary["passed_trials"] == summary["trials"]
 
 
 def _git(*args: str) -> str:

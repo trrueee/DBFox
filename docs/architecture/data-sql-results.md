@@ -48,6 +48,10 @@ model SQL
 
 成功校验的 Observation 包含规范查询指纹，供通用进展判定区分不同查询；同一查询仅更换 Artifact ID 不构成新进展。Workbook 白名单采用 DuckDB 原生正则提取与替换，guard 给出可纠正的静态原因，禁止外部文件访问的边界不变。
 
+SQL 校验利用现有 SQLGlot 作用域识别同一个 `SELECT` 在连接后的行上聚合多个来源的情况。
+当看到源表各自的度量可能被连接重复时，Data 反馈需要核对连接键的唯一性或先分别聚合。
+此提示属于统计口径检查。执行准入仍由 Schema、只读规则、EXPLAIN 和审批判定。
+
 ## 4. Result、Snapshot 与 Representation
 
 普通 `dbfox.data.result_view` 是 reference-only Artifact。它保存已经校验的 SQL Artifact、绑定参数、数据库
@@ -75,6 +79,9 @@ DataFrame 字段优先保留本次 DB-API 查询的原生类型元数据，再�
 
 模型只接收有界 Tool Observation 和 Artifact 引用。需要查看更多值时，通过 Data Tool 或
 Representation 读取；Conversation、RunItem、Evidence 和前端 Store 都不保存完整 Result rows。
+执行反馈中的 `returned_rows` 表示模型收到的预览行数，`row_count` 表示本次有界查询读到的结果行数。
+`truncated` 表示这些预览行未覆盖完整查询结果。反馈携带 SQL 校验工件引用，并在长度允许时提供实际执行的 SQL，
+供模型核对筛选条件和统计范围。SQL 文本和预览行只随本次工具反馈送入模型。
 
 ## 5. 备份、凭据与生命周期
 

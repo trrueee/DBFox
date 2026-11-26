@@ -374,6 +374,14 @@ jobs:
           python -m pytest verification/tests/agent_core -q --tb=short
           -m "not e2e and not integration and not real_llm"
 
+      - name: Verify deterministic Agent outcomes
+        env:
+          DBFOX_TESTING: "1"
+          DBFOX_RUNTIME_DIR: ${{ runner.temp }}/dbfox-core-bench
+        run: |
+          python -m verification.bench run core.loop.scripted --output output/core-loop-ci
+          python -m verification.bench run core.authority.scripted --output output/core-authority-ci
+
   sidecar-build:
     name: Frozen sidecar build smoke
     needs: changes

@@ -203,3 +203,58 @@ def test_llm_test_requires_opaque_credential_reference_even_when_env_exists(monk
             api_base="https://example.test/v1",
             model_name="qwen-plus",
         )
+
+def test_llm_test_uses_chat_completions_when_the_run_selects_it(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            captured["chat"] = kwargs
+
+    class FakeChat:
+        def __init__(self) -> None:
+            self.completions = FakeCompletions()
+
+    class FakeResponses:
+        def create(self, **_kwargs):
+            raise AssertionError("Responses must not be used for a Chat provider")
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.chat = FakeChat()
+            self.responses = FakeResponses()
+
+    def fake_create_client(**kwargs):
+        captured["client_kwargs"] = kwargs
+        return FakeClient()
+
+    def fake_resolve_product_config(**_kwargs):
+        return SimpleNamespace(
+            model_name="deepseek-chat",
+            api_key="test-secret",
+            api_base="https://api.deepseek.com/v1",
+            source="product",
+        )
+
+    monkeypatch.setattr(
+        agent_module,
+        "resolve_product_llm_config_from_credential",
+        fake_resolve_product_config,
+    )
+    monkeypatch.setattr(agent_module, "create_openai_responses_client", fake_create_client)
+
+    response = agent_module.api_llm_test(
+        agent_module.LlmTestRequest(
+            llm_credential_id="cred_llm_api_key_test",
+            api_base="https://api.deepseek.com/v1",
+            model_name="deepseek-chat",
+            provider="openai-chat",
+        )
+    )
+
+    assert response.ok is True
+    assert captured["chat"] == {
+        "model": "deepseek-chat",
+        "messages": [{"role": "user", "content": "ping"}],
+        "max_tokens": 16,
+    }

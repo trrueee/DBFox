@@ -35,6 +35,7 @@ import {
   applyModelPresetSelection,
   detectProviderFromBaseUrl,
   findProvider,
+  providerPresetProtocol,
 } from "../lib/llmProviders";
 import { listDraftLlmModels } from "../features/appShell/llmDraftConnection";
 import "./LlmConfigPanel.css";
@@ -57,6 +58,7 @@ const llmConfigSchema = z.object({
     message: "API Base URL 必须是有效的 http(s) 地址",
   }),
   modelName: z.string(),
+  provider: z.enum(["openai-responses", "openai-chat"]).optional(),
 });
 
 interface FetchedModels {
@@ -205,7 +207,7 @@ export function LlmConfigPanel({
               value={selectedProviderId}
               onValueChange={(providerId) => {
                 const provider = findProvider(providerId);
-                if (provider) applyConfigPatch({ apiBase: provider.baseUrl });
+                if (provider) applyConfigPatch({ apiBase: provider.baseUrl, provider: providerPresetProtocol(provider) });
               }}
             >
               <SelectTrigger id="llm-provider" className="llm-model-select">
@@ -262,7 +264,23 @@ export function LlmConfigPanel({
 
           <details className="llm-endpoint-disclosure" open={endpointExpanded || !detectedProvider || Boolean(formState.errors.apiBase)}
             onToggle={event => setEndpointExpanded(event.currentTarget.open)}>
-          <summary><span>连接地址</span><CaretDownIcon size={16} aria-hidden="true" /></summary>
+          <summary><span>连接设置</span><CaretDownIcon size={16} aria-hidden="true" /></summary>
+          <SettingsField label="接口协议" htmlFor="llm-protocol">
+            <Select
+              value={values.provider ?? "openai-responses"}
+              onValueChange={(provider) => {
+                if (provider === "openai-responses" || provider === "openai-chat") {
+                  applyConfigPatch({ provider });
+                }
+              }}
+            >
+              <SelectTrigger id="llm-protocol" className="llm-model-select"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="openai-responses">Responses</SelectItem>
+                <SelectItem value="openai-chat">Chat Completions</SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingsField>
           <SettingsField label="API Base URL" htmlFor="llm-api-base"
             error={formState.errors.apiBase?.message}>
             <input

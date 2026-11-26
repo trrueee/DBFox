@@ -150,8 +150,27 @@ def test_requirements_survive_native_history_and_reserve_their_own_prompt_budget
     assert "frozen at user input admission" in bundle.messages[-1]["content"]
     assert "No citations" in bundle.messages[-2]["content"]
     requirement_messages = [message for message in bundle.messages if "<dbfox_answer_requirements" in str(message.get("content", ""))]
-    assert len(requirement_messages) == 1 and requirement_messages[0]["role"] == "user"
+    assert len(requirement_messages) == 1 and requirement_messages[0]["role"] == "system"
     assert "<dbfox_answer_requirements" not in bundle.system_prompt
+
+
+@pytest.mark.parametrize(("observed", "citable", "active"), [
+    (False, [], False),
+    (True, ["artifact_public"], True),
+    (True, [], True),
+])
+def test_prompt_only_projects_the_active_delivery_condition(db_session, required_run, observed, citable, active):
+    admission, _lease = required_run
+    context = ContextAssembler(db_session).build(admission.run_id).model_copy(update={
+        "answer_requirements": AnswerRequirements(evidence="when_observed"),
+        "has_observed_public_artifacts": observed, "citable_artifact_ids": citable,
+    })
+    bundle = PromptAssembler().assemble(definition=DEFAULT_AGENT_DEFINITION, context=context)
+    hints = [item for item in bundle.messages if "<dbfox_answer_requirements" in str(item.get("content", ""))]
+    assert bool(hints) is active
+    assert bool(bundle.budget["answer_requirements_tokens"]) is active
+    assert all(item["role"] == "system" for item in hints)
+    assert context.answer_requirements.evidence == "when_observed"
 
 
 def test_forced_partial_without_an_answer_cannot_skip_required_delivery(db_session, required_run):

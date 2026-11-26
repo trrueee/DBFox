@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.models import (
@@ -17,11 +17,13 @@ from engine.models import (
     AgentRun,
     AgentSession,
     AgentSessionInput,
+    AgentSessionMemory,
     AgentTaskPlanRecord,
     AgentToolInvocation,
     AgentTurn,
 )
 from engine.agent.context_budget import (
+    ContextBudgetExceeded,
     ContextBudgetPlanner,
     ContextBudgetResult,
     ContextBudgetSegment,
@@ -44,13 +46,14 @@ from engine.agent.resource_refs import (
     ProjectResourceDescriptor,
     ProjectResourceProvider,
     discover_resources_from_providers,
+    load_resource_refs,
     resource_refs_for_run,
 )
 from engine.agent.references import (
     ConversationInputReference,
     load_input_references,
 )
-from engine.agent.artifact import Artifact, ArtifactVisibility
+from engine.agent.artifact import Artifact
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.representation import ArtifactRepresentationDescriptor
 from engine.app.safe_errors import fixed_error_detail
@@ -66,8 +69,9 @@ from engine.tools.runtime.attempt import ResourceScopeRef
 MAX_HISTORY_MESSAGES = 24
 MAX_MESSAGE_CHARS = 32_768
 MAX_SELECTED_ARTIFACTS = 10
-MAX_OBSERVATIONS = 24
-MAX_CURRENT_REQUEST_CHARS = 40_000
+# Prompt and evidence-ledger retention only. Completion reads the durable Run.
+MAX_OBSERVATIONS = 48
+MAX_CONSUMED_STEER_CHARS = 40_000
 MAX_PROMPT_RESOURCE_DIRECTORY_ENTRIES = 32
 
 
@@ -136,6 +140,7 @@ class ContextObservation(BaseModel):
     id: str
     turn_id: str = ""
     tool_name: str
+    function_kind: str = "tool"
     status: str
     summary: str
     artifact_ids: list[str] = Field(default_factory=list)
@@ -143,6 +148,8 @@ class ContextObservation(BaseModel):
     sequence: int = 0
     capabilities: tuple[str, ...] = ()
     contributes_progress: bool = True
+    error_code: str | None = None
+    resource_refs: tuple[ResourceScopeRef, ...] = ()
 
 
 class ResponseItemBatch(BaseModel):
@@ -442,7 +449,6 @@ class ContextSnapshot(BaseModel):
                     ),
                     suffix="\n</dbfox_current_request>",
                     required=True,
-                    truncatable=True,
                 )
             )
         return ContextBudgetPlanner(max_prompt_tokens=max_prompt_tokens).fit(
@@ -578,20 +584,24 @@ class ContextAssembler:
                 ),
             )
         )
-        observations = self._observations(run, sources)
+        observations = self._observations(str(run.id), limit=MAX_OBSERVATIONS)
+        sources.append(
+            ContextSource(
+                kind="run_observations",
+                source_id=str(run.id),
+                version=str(len(observations)),
+                included=bool(observations),
+                reason=f"included {len(observations)} settled observations for the prompt",
+            )
+        )
         requirements_payload = _json_object(run.request_json).get("answer_requirements")
         answer_requirements = (
             AnswerRequirements.model_validate(requirements_payload)
             if requirements_payload is not None else None
         )
         source_repository = ArtifactRepository(self.session, resource_discovery=self.resource_discovery)
-        citable_artifact_ids = [
-            artifact.id for artifact in source_repository.observed_artifacts_for_run(run_id)
-            if artifact.visibility is not ArtifactVisibility.INTERNAL
-        ] if answer_requirements is not None else []
-        has_observed_public_artifacts = (
-            source_repository.has_observed_public_artifacts(run_id) if answer_requirements is not None else False
-        )
+        citable_artifacts, has_observed_public_artifacts = source_repository.observed_public_sources(run_id)
+        citable_artifact_ids = [artifact.id for artifact in citable_artifacts]
         if answer_requirements is not None:
             sources.append(ContextSource(
                 kind="answer_requirements", source_id=str(run.id), version="1",
@@ -605,18 +615,10 @@ class ContextAssembler:
                 included=True, reason="current durable plan, independent of native transcript retention",
                 provenance={"canonical_table": "agent_task_plans"},
             ))
-        # Capability-owned durable context is supplied through Context
-        # contributors. The Kernel does not interpret database/catalog memory.
-        memory: dict[str, Any] = {}
-        sources.append(
-            ContextSource(
-                kind="session_memory",
-                source_id=str(aggregate.id),
-                version=str(aggregate.context_epoch or 0),
-                included=False,
-                reason="capability memory is supplied by context contributors",
-            )
-        )
+        # Core projects only its own bounded working set and evidence
+        # references.  Capability-owned durable context keeps arriving through
+        # Context contributors instead of being copied into this envelope.
+        memory = self._session_memory(aggregate, sources)
         context_fragments = self._context_fragments(run, aggregate)
         if context_fragments:
             fragment_stats: dict[str, tuple[str, int]] = {}
@@ -1044,29 +1046,33 @@ class ContextAssembler:
         if current_user is None:
             raise ValueError("Agent Run has no durable user message")
 
-        supplemental_message_ids = list(
-            self.session.execute(
-                select(AgentSessionInput.message_id).where(
-                    AgentSessionInput.run_id == run.id,
-                    AgentSessionInput.delivery_mode.in_(["steer", "respond"]),
-                    AgentSessionInput.status == "consumed",
-                    AgentSessionInput.reply_to_request_id.is_(None),
-                )
-            ).scalars()
+        supplemental_inputs = select(AgentSessionInput).where(
+            AgentSessionInput.run_id == run.id,
+            AgentSessionInput.delivery_mode.in_(["steer", "respond"]),
+            AgentSessionInput.status == "consumed",
+            AgentSessionInput.reply_to_request_id.is_(None),
         )
-        # The active request is deliberately kept out of ordinary history and
-        # appended as the final, explicitly-scoped user message. This prevents a
-        # failed assistant draft in a prior Run from turning two separate user
-        # turns into one apparent multi-question request.
-        scope = AgentMessage.sequence < current_user.sequence
-        if supplemental_message_ids:
-            scope = or_(scope, AgentMessage.id.in_(supplemental_message_ids))
+        consumed_steers: list[str] = []
+        supplemental_message_ids: list[str] = []
+        steer_chars = 0
+        # Active updates are mandatory context and must never share the history limit.
+        for update in self.session.scalars(
+            supplemental_inputs.order_by(AgentSessionInput.sequence).execution_options(yield_per=MAX_HISTORY_MESSAGES),
+        ):
+            content = str(update.content or "")
+            steer_chars += len(content)
+            if steer_chars > MAX_CONSUMED_STEER_CHARS:
+                raise ContextBudgetExceeded("Consumed user updates exceed the active request budget")
+            consumed_steers.append(content)
+            supplemental_message_ids.append(str(update.message_id))
+
+        # Keep the active request and its updates out of ordinary history.
         rows = list(
             self.session.execute(
                 select(AgentMessage)
                 .where(
                     AgentMessage.session_id == run.session_id,
-                    scope,
+                    AgentMessage.sequence < current_user.sequence,
                 )
                 .order_by(AgentMessage.sequence.desc())
                 .limit(MAX_HISTORY_MESSAGES)
@@ -1075,31 +1081,16 @@ class ContextAssembler:
             .all()
         )
         rows.reverse()
-        history_rows = [
-            row for row in rows if str(row.id) not in supplemental_message_ids
-        ]
         messages = [
             {
                 "role": str(row.role),
                 "content": str(row.content or "")[:MAX_MESSAGE_CHARS],
             }
-            for row in history_rows
+            for row in rows
             if row.role == "user"
             or (row.role == "assistant" and row.status == "completed")
         ]
-        consumed_steers = [
-            str(row.content or "")[:MAX_MESSAGE_CHARS]
-            for row in rows
-            if str(row.id) in supplemental_message_ids and row.role == "user"
-        ]
-        current_request = str(current_user.content or "")[:MAX_MESSAGE_CHARS]
-        remaining = MAX_CURRENT_REQUEST_CHARS
-        accepted_steers: list[str] = []
-        for value in consumed_steers:
-            if remaining <= 0:
-                break
-            accepted_steers.append(value[:remaining])
-            remaining -= len(accepted_steers[-1])
+        current_request = str(current_user.content or "")
         sources.append(
             ContextSource(
                 kind="session_history",
@@ -1108,12 +1099,117 @@ class ContextAssembler:
                 included=True,
                 reason=(
                     f"included {len(messages)} historical messages; isolated the current request "
-                    f"and {len(accepted_steers)} consumed in-run steers"
+                    f"and {len(consumed_steers)} consumed in-run steers"
                 ),
                 provenance={"supplemental_message_ids": supplemental_message_ids},
             )
         )
-        return messages, current_request, accepted_steers
+        return messages, current_request, consumed_steers
+
+    def _session_memory(
+        self,
+        aggregate: AgentSession,
+        sources: list[ContextSource],
+    ) -> dict[str, Any]:
+        """Project the Core-owned session memory into a bounded prompt envelope."""
+
+        row = self.session.execute(
+            select(AgentSessionMemory).where(
+                AgentSessionMemory.session_id == aggregate.id
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            sources.append(
+                ContextSource(
+                    kind="session_memory",
+                    source_id=str(aggregate.id),
+                    version=str(aggregate.context_epoch or 0),
+                    included=False,
+                    reason="no durable session memory",
+                    provenance={"canonical_table": "agent_session_memories"},
+                )
+            )
+            return {}
+        payload = _load_json(row.memory_json)
+        if not isinstance(payload, dict):
+            payload = {}
+        working = payload.get("working_set")
+        stable = payload.get("stable_context")
+        working = working if isinstance(working, dict) else {}
+        stable = stable if isinstance(stable, dict) else {}
+
+        selected = working.get("selected_artifact_id")
+        references = working.get("referenced_artifact_ids")
+        open_questions = working.get("open_questions")
+        evidence_references = stable.get("evidence_references")
+        referenced = [
+            value
+            for value in (references if isinstance(references, list) else [])
+            if isinstance(value, str) and value.strip()
+        ][:8]
+        questions = [
+            value[:200]
+            for value in (open_questions if isinstance(open_questions, list) else [])
+            if isinstance(value, str) and value.strip()
+        ][:5]
+        evidence = [
+            {
+                "artifact_id": item["artifact_id"],
+                "observed_at": item["observed_at"] if isinstance(item.get("observed_at"), str) else "",
+            }
+            for item in (evidence_references if isinstance(evidence_references, list) else [])
+            if isinstance(item, dict) and isinstance(item.get("artifact_id"), str) and item["artifact_id"].strip()
+        ][-8:]
+
+        projected: dict[str, Any] = {}
+        selected = selected if isinstance(selected, str) else ""
+        if selected or referenced or questions:
+            projected["working_set"] = {
+                **(
+                    {"selected_artifact_id": str(selected)}
+                    if selected
+                    else {}
+                ),
+                "referenced_artifact_ids": referenced,
+                "open_questions": questions,
+            }
+        if evidence:
+            projected["evidence_references"] = evidence
+        if projected:
+            projected["version"] = (
+                int(payload["version"])
+                if isinstance(payload.get("version"), int)
+                else 1
+            )
+        # Hard boundary: a corrupt or oversized projection must not displace
+        # the current request.  Keep only the smallest useful working set.
+        if projected and len(_canonical(projected).encode("utf-8")) > 4_096:
+            working_set = projected.get("working_set")
+            if isinstance(working_set, dict):
+                working_set["referenced_artifact_ids"] = working_set.get(
+                    "referenced_artifact_ids", []
+                )[:2]
+                working_set["open_questions"] = working_set.get("open_questions", [])[:2]
+            projected["evidence_references"] = projected.get(
+                "evidence_references", []
+            )[-2:]
+        if projected and len(_canonical(projected).encode("utf-8")) > 4_096:
+            projected = {}
+        sources.append(
+            ContextSource(
+                kind="session_memory",
+                source_id=str(aggregate.id),
+                version=str(projected.get("version") or aggregate.context_epoch or 0),
+                included=bool(projected),
+                reason=(
+                    "bounded Core working set and evidence references"
+                    if projected
+                    else "session memory exceeds its prompt envelope"
+                ),
+                provenance={"canonical_table": "agent_session_memories"},
+            )
+        )
+        return projected
 
     def _response_batches(
         self,
@@ -1254,8 +1350,19 @@ class ContextAssembler:
         )
         return artifacts
 
+    def for_completion(self, snapshot: ContextSnapshot) -> ContextSnapshot:
+        """Read settled tool facts independently of the persisted prompt slice."""
+        sources, observed_public = ArtifactRepository(
+            self.session, resource_discovery=self.resource_discovery,
+        ).observed_public_sources(snapshot.run_id)
+        return snapshot.model_copy(update={
+            "observations": self._observations(snapshot.run_id),
+            "citable_artifact_ids": [artifact.id for artifact in sources],
+            "has_observed_public_artifacts": observed_public,
+        })
+
     def _observations(
-        self, run: AgentRun, sources: list[ContextSource]
+        self, run_id: str, *, limit: int | None = None,
     ) -> list[ContextObservation]:
         rows = list(
             self.session.execute(
@@ -1263,22 +1370,35 @@ class ContextAssembler:
                     AgentObservationRecord,
                     AgentToolInvocation.tool_name,
                     AgentToolInvocation.turn_id,
+                    AgentToolInvocation.resource_refs_json,
+                    AgentTurn.tool_materialization_json,
                 )
                 .join(
                     AgentToolInvocation,
                     AgentToolInvocation.id == AgentObservationRecord.tool_invocation_id,
                 )
-                .where(AgentObservationRecord.run_id == run.id)
+                .outerjoin(AgentTurn, AgentTurn.id == AgentToolInvocation.turn_id)
+                .where(AgentObservationRecord.run_id == run_id)
                 .order_by(AgentObservationRecord.sequence.desc())
-                .limit(MAX_OBSERVATIONS)
+                .limit(limit)
             ).all()
         )
         rows.reverse()
-        values = [
-            ContextObservation(
+        values: list[ContextObservation] = []
+        kinds_by_turn: dict[str, dict[str, str]] = {}
+        for row, tool_name, turn_id, resource_refs, materialization in rows:
+            key = str(turn_id)
+            if key not in kinds_by_turn:
+                frozen = _json_object(materialization).get("tools", [])
+                kinds_by_turn[key] = {
+                    str(tool.get("name")): str(tool.get("kind") or "tool")
+                    for tool in frozen if isinstance(tool, dict)
+                } if isinstance(frozen, list) else {}
+            values.append(ContextObservation(
                 id=str(row.id),
                 turn_id=str(turn_id),
                 tool_name=str(tool_name),
+                function_kind=kinds_by_turn[key].get(str(tool_name), "tool"),
                 status=str(row.status),
                 summary=str(row.model_visible_summary),
                 artifact_ids=_json_strings(row.artifact_ids_json),
@@ -1286,18 +1406,9 @@ class ContextAssembler:
                 sequence=int(row.sequence),
                 capabilities=tuple(_json_strings(row.semantic_capabilities_json)),
                 contributes_progress=bool(row.contributes_progress),
-            )
-            for row, tool_name, turn_id in rows
-        ]
-        sources.append(
-            ContextSource(
-                kind="run_observations",
-                source_id=str(run.id),
-                version=str(len(values)),
-                included=bool(values),
-                reason=f"included {len(values)} settled observations",
-            )
-        )
+                error_code=str(row.error_code) if row.error_code else None,
+                resource_refs=load_resource_refs(str(resource_refs or "[]")),
+            ))
         return values
 
 def _context_artifact_descriptor(artifact_type: str, payload: Any) -> dict[str, Any]:

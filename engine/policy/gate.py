@@ -64,6 +64,12 @@ def _safe_input_contract_reason(
         if issue_type not in _VALIDATION_ERROR_TYPES:
             issue_type = "invalid"
         issue = f"{location} ({issue_type})"
+        if issue_type == "list_type":
+            issue += ": supply a JSON array, not a JSON-encoded string"
+        elif issue_type == "dict_type":
+            issue += ": supply a JSON object, not a JSON-encoded string"
+        elif issue_type == "string_type":
+            issue += ": supply a JSON string value, not an object or array"
         if issue not in issues:
             issues.append(issue)
     summary = (", ".join(issues) or "arguments (invalid)")[:1_500]

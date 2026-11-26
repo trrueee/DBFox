@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import CancelledError
 import logging
 import time
 from typing import TYPE_CHECKING, Any, Callable, Final, Literal
@@ -138,6 +139,16 @@ class ToolRuntime:
                     error="Tool execution exceeded its deadline.", error_code="TOOL_TIMEOUT",
                     latency_ms=int((time.perf_counter() - start) * 1_000),
                 )
+        except (CancelledError, TimeoutError) as exc:
+            cancelled = isinstance(exc, CancelledError)
+            return ToolResult(
+                name=tool_name,
+                status="failed",
+                input=dict(raw_input),
+                error="Tool execution was cancelled." if cancelled else "Tool execution exceeded its deadline.",
+                error_code="TOOL_CANCELLED" if cancelled else "TOOL_TIMEOUT",
+                latency_ms=int((time.perf_counter() - start) * 1_000),
+            )
         except ToolInputError as exc:
             safe_message = exc.message.strip()
             if len(safe_message) > _MAX_TOOL_INPUT_ERROR_CHARS:

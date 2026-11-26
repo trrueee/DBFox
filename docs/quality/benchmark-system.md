@@ -128,6 +128,9 @@ python -m verification.bench replay capability.dbfox_data.agent `
 
 旧 `verification.bench.agentbench` 模块和命令已删除，不提供兼容转发。
 
+`run` 和 `replay` 在全部试次通过时返回成功。空结果、未评分试次以及未完成的真实模型试次
+会使门禁失败，报告仍单独保存基础设施错误。Data 的基准值独立计算，以便区分模型没有执行查询与评测本身失效。
+
 ## 6. 调研与复用决策
 
 实现前调查了仓库现有生产 RunLoop、pytest fixtures、DLC snapshot/resource authority、旧 60-case runner、CI 和历史设计；也参考了 [pytest 的外置测试与 importlib 建议](https://docs.pytest.org/en/7.1.x/explanation/goodpractices.html)、[Inspect 的 Task = Dataset + Solver + Scorer](https://inspect.aisi.org.uk/tasks.html) 与 [scorer/metric 分离](https://inspect.aisi.org.uk/standard-scorers.html)、[OpenAI Evals 的 data source + grader 合同](https://platform.openai.com/docs/api-reference/evals)。

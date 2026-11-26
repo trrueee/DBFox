@@ -1,4 +1,5 @@
 import type { ApiConfig, LlmConfigDraft } from "./api/types";
+import type { LlmProviderProtocol } from "./api/types/llmProtocol";
 import { validateApiConfig } from "./api/types";
 import { DEFAULT_LLM_API_BASE } from "./llmProviders";
 
@@ -9,12 +10,14 @@ export const DEFAULT_API_CONFIG: ApiConfig = {
   credentialId: "",
   apiBase: DEFAULT_LLM_API_BASE,
   modelName: "",
+  provider: "openai-responses",
 };
 
 export interface NormalizedProductLlmConfig {
   credentialId: string;
   apiBase: string;
   modelName: string;
+  provider: LlmProviderProtocol;
   hasCredential: boolean;
 }
 
@@ -24,6 +27,7 @@ export interface ConversationLlmPayload {
   llm_credential_id?: string;
   api_base?: string;
   model_name?: string;
+  provider?: LlmProviderProtocol;
 }
 
 function clean(value: string | null | undefined): string {
@@ -40,10 +44,12 @@ function browserStorage(): LlmStorage | null {
 }
 
 function normalizedStoredConfig(config: ApiConfig): ApiConfig {
+  const apiBase = clean(config.apiBase) || DEFAULT_LLM_API_BASE;
   return {
     credentialId: clean(config.credentialId),
-    apiBase: clean(config.apiBase) || DEFAULT_LLM_API_BASE,
+    apiBase,
     modelName: clean(config.modelName),
+    provider: config.provider ?? "openai-responses",
   };
 }
 
@@ -87,10 +93,12 @@ export function normalizeProductLlmConfig(
   config: Partial<ApiConfig> | null | undefined,
 ): NormalizedProductLlmConfig {
   const credentialId = clean(config?.credentialId);
+  const apiBase = clean(config?.apiBase) || DEFAULT_LLM_API_BASE;
   return {
     credentialId,
-    apiBase: clean(config?.apiBase) || DEFAULT_LLM_API_BASE,
+    apiBase,
     modelName: clean(config?.modelName),
+    provider: config?.provider ?? "openai-responses",
     hasCredential: Boolean(credentialId),
   };
 }
@@ -104,6 +112,7 @@ export function buildConversationLlmPayload(
     llm_credential_id: llm.credentialId,
     api_base: llm.apiBase,
     model_name: llm.modelName || undefined,
+    provider: llm.provider,
   };
 }
 
@@ -111,11 +120,13 @@ export function buildLlmTestValues(config: Partial<ApiConfig> | null | undefined
   llmCredentialId: string;
   apiBase: string;
   modelName: string;
+  provider: LlmProviderProtocol;
 } {
   const llm = normalizeProductLlmConfig(config);
   return {
     llmCredentialId: llm.credentialId,
     apiBase: llm.apiBase,
     modelName: llm.modelName,
+    provider: llm.provider,
   };
 }

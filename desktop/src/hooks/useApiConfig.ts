@@ -26,10 +26,12 @@ export function useApiConfig() {
       const reference = await enrollCredential("llm_api_key", apiKey);
       credentialId = reference.id;
     }
+    const apiBase = draft.apiBase.trim();
     const next: ApiConfig = {
       credentialId,
-      apiBase: draft.apiBase.trim(),
+      apiBase,
       modelName: draft.modelName.trim(),
+      provider: draft.provider,
     };
     saveStoredApiConfig(next);
     setDraft(createLlmConfigDraft(next));

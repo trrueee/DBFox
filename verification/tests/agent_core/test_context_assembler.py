@@ -7,6 +7,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict
 
 from engine.agent.context import ContextAssembler
+from engine.agent.context_budget import ContextBudgetExceeded
 from engine.agent.artifact import ArtifactDraft
 from engine.agent.observation import ObservationStatus
 from engine.agent.references import ConversationInputReference
@@ -355,8 +356,13 @@ def test_attached_artifact_reference_is_projected_as_selected_context(
     assert snapshot.input_references[0].artifact_id == artifact.id
 
 
+@pytest.mark.parametrize("updates", [
+    ["补充：只看华东区"],
+    [f"第 {index + 1} 条补充要求" for index in range(28)],
+    ["必须保留的条件。" * 1_800, "用户随后增加的限制。" * 1_800, "最后一项补充要求。" * 1_800],
+], ids=["one-update", "more-than-history-window", "exceeds-active-update-budget"])
 def test_context_includes_consumed_steer_without_leaking_queued_input(
-    db_session, test_resource
+    db_session, test_resource, updates,
 ) -> None:
     db_session.add(
         AgentSession(id="session_steer_context", project_id=None,
@@ -389,25 +395,31 @@ def test_context_includes_consumed_steer_without_leaking_queued_input(
         request_payload={},
         delivery_mode=DeliveryMode.QUEUE,
     )
-    repository.admit(
-        session_id="session_steer_context",
-        resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
-        content="补充：只看华东区",
-        idempotency_key="steer",
-        llm_credential_id="credential",
-        api_base=None,
-        model_name="model",
-        request_payload={},
-        delivery_mode=DeliveryMode.STEER,
-    )
+    for index, content in enumerate(updates):
+        repository.admit(
+            session_id="session_steer_context",
+            resource_refs=(ResourceScopeRef(kind="verification.resource", id=str(test_resource.id), version="1:1"),),
+            content=content,
+            idempotency_key=f"steer-{index}",
+            llm_credential_id="credential",
+            api_base=None,
+            model_name="model",
+            request_payload={},
+            delivery_mode=DeliveryMode.STEER,
+        )
     repository.consume_steering_inputs(lease=lease, run_id=active.run_id)
     db_session.commit()
 
-    snapshot = ContextAssembler(db_session).build(active.run_id)
+    assembler = ContextAssembler(db_session)
+    if sum(map(len, updates)) > 40_000:
+        with pytest.raises(ContextBudgetExceeded):
+            assembler.build(active.run_id)
+        return
+    snapshot = assembler.build(active.run_id)
 
     assert snapshot.messages == []
     assert snapshot.current_request == "分析所有地区的退款率"
-    assert snapshot.consumed_steers == ["补充：只看华东区"]
+    assert snapshot.consumed_steers == updates
     assert "下一项任务：分析客单价" not in snapshot.current_request
 
 

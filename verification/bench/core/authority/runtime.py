@@ -66,17 +66,14 @@ def _run_case(
         sessions.promote_next_input(lease=lease)
         db.commit()
 
-    scripts = [
-        tool_call_events(
-            call_id=f"probe-{case.requested_id}",
-            tool_name="verification_resource_probe",
-            arguments={"resource_id": case.requested_id},
-        ),
-        answer_events("access granted" if case.expect_access else "access denied"),
-    ]
+    first_turn = iter([tool_call_events(
+        call_id=f"probe-{case.requested_id}",
+        tool_name="verification_resource_probe",
+        arguments={"resource_id": case.requested_id},
+    )])
 
     def model_factory(_settings):
-        return ScriptedProvider(scripts.pop(0))
+        return ScriptedProvider(next(first_turn, answer_events("access granted" if case.expect_access else "access denied")))
 
     access_log: list[str] = []
     resolver = CompositeResourceResolver().register(
@@ -127,7 +124,9 @@ def _run_case(
         violations = sum(item not in case.authorized_ids for item in access_log)
         text = str(answer.content or "") if answer is not None else ""
         checks = {
-            "completed": run is not None and str(run.status) == "completed",
+            "correct_terminal_status": run is not None and str(run.status) == (
+                "completed" if case.expect_access else "failed"
+            ),
             "expected_answer": ("granted" in text) == case.expect_access,
             "selection": selection_ok,
             "no_authority_violation": accessed_authorized and violations == 0,

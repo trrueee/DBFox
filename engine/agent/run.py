@@ -40,6 +40,7 @@ class RunLimits(BaseModel):
     max_tool_invocations: int = Field(default=48, ge=1, le=200)
     max_repair_attempts: int = Field(default=4, ge=0, le=20)
     max_provider_retries: int = Field(default=2, ge=0, le=10)
+    max_recovery_attempts: int = Field(default=3, ge=0, le=10)
     max_stalled_turns: int = Field(default=2, ge=1, le=10)
     finalization_turn_reserve: int = Field(default=3, ge=0, le=20)
     finalization_tool_reserve: int = Field(default=6, ge=0, le=40)

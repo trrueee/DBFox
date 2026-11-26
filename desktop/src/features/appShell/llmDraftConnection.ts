@@ -11,7 +11,7 @@ export async function testDraftLlmConnection(draft: LlmConfigDraft) {
   const llm = buildLlmTestValues(draft);
   const apiKey = draft.apiKey.trim();
   if (!apiKey) {
-    return testLlmConnection(llm.llmCredentialId, llm.apiBase, llm.modelName);
+    return testLlmConnection(llm.llmCredentialId, llm.apiBase, llm.modelName, llm.provider);
   }
 
   const enrollment = await enrollCredentials([
@@ -27,7 +27,7 @@ export async function testDraftLlmConnection(draft: LlmConfigDraft) {
   }
 
   try {
-    return await testLlmConnection(credential.id, llm.apiBase, llm.modelName);
+    return await testLlmConnection(credential.id, llm.apiBase, llm.modelName, llm.provider);
   } finally {
     await releaseCredentialLease(enrollment.lease_id).catch(() => undefined);
   }

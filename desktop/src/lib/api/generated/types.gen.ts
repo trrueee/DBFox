@@ -739,6 +739,10 @@ export type ConversationInputRequest = {
      */
     model_name?: string | null;
     /**
+     * Provider
+     */
+    provider?: 'openai-responses' | 'openai-chat' | null;
+    /**
      * References
      */
     references?: Array<ConversationInputReference>;
@@ -1792,6 +1796,10 @@ export type LlmTestRequest = {
      * Model Name
      */
     model_name?: string | null;
+    /**
+     * Provider
+     */
+    provider?: 'openai-responses' | 'openai-chat';
 };
 
 /**
@@ -3146,64 +3154,6 @@ export type ApiLocalModelTestApiV1AgentLocalModelTestPostResponses = {
 
 export type ApiLocalModelTestApiV1AgentLocalModelTestPostResponse = ApiLocalModelTestApiV1AgentLocalModelTestPostResponses[keyof ApiLocalModelTestApiV1AgentLocalModelTestPostResponses];
 
-export type ResolveApprovalApiV1ApprovalsApprovalIdResolvePostData = {
-    body: ApprovalResolutionRequest;
-    path: {
-        /**
-         * Approval Id
-         */
-        approval_id: string;
-    };
-    query?: never;
-    url: '/api/v1/approvals/{approval_id}/resolve';
-};
-
-export type ResolveApprovalApiV1ApprovalsApprovalIdResolvePostErrors = {
-    /**
-     * RFC 9457 error response (400)
-     */
-    400: ProblemDetails;
-    /**
-     * RFC 9457 error response (401)
-     */
-    401: ProblemDetails;
-    /**
-     * RFC 9457 error response (403)
-     */
-    403: ProblemDetails;
-    /**
-     * RFC 9457 error response (404)
-     */
-    404: ProblemDetails;
-    /**
-     * RFC 9457 error response (409)
-     */
-    409: ProblemDetails;
-    /**
-     * RFC 9457 error response (422)
-     */
-    422: ProblemDetails;
-    /**
-     * RFC 9457 error response (500)
-     */
-    500: ProblemDetails;
-    /**
-     * RFC 9457 error response (503)
-     */
-    503: ProblemDetails;
-};
-
-export type ResolveApprovalApiV1ApprovalsApprovalIdResolvePostError = ResolveApprovalApiV1ApprovalsApprovalIdResolvePostErrors[keyof ResolveApprovalApiV1ApprovalsApprovalIdResolvePostErrors];
-
-export type ResolveApprovalApiV1ApprovalsApprovalIdResolvePostResponses = {
-    /**
-     * Successful Response
-     */
-    200: Approval;
-};
-
-export type ResolveApprovalApiV1ApprovalsApprovalIdResolvePostResponse = ResolveApprovalApiV1ApprovalsApprovalIdResolvePostResponses[keyof ResolveApprovalApiV1ApprovalsApprovalIdResolvePostResponses];
-
 export type ApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetData = {
     body?: never;
     path: {
@@ -3859,6 +3809,68 @@ export type PatchConversationApiV1ConversationsConversationIdPatchResponses = {
 };
 
 export type PatchConversationApiV1ConversationsConversationIdPatchResponse = PatchConversationApiV1ConversationsConversationIdPatchResponses[keyof PatchConversationApiV1ConversationsConversationIdPatchResponses];
+
+export type ResolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePostData = {
+    body: ApprovalResolutionRequest;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Approval Id
+         */
+        approval_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{conversation_id}/approvals/{approval_id}/resolve';
+};
+
+export type ResolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ResolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePostError = ResolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePostErrors[keyof ResolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePostErrors];
+
+export type ResolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: Approval;
+};
+
+export type ResolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePostResponse = ResolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePostResponses[keyof ResolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePostResponses];
 
 export type SelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostData = {
     body: ArtifactSelectionRequest;
@@ -4677,6 +4689,68 @@ export type AdmitConversationInputApiV1ConversationsConversationIdInputsPostResp
 
 export type AdmitConversationInputApiV1ConversationsConversationIdInputsPostResponse = AdmitConversationInputApiV1ConversationsConversationIdInputsPostResponses[keyof AdmitConversationInputApiV1ConversationsConversationIdInputsPostResponses];
 
+export type ResolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePostData = {
+    body: QuestionResolutionRequest;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Question Id
+         */
+        question_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{conversation_id}/questions/{question_id}/resolve';
+};
+
+export type ResolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type ResolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePostError = ResolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePostErrors[keyof ResolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePostErrors];
+
+export type ResolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: QuestionRequest;
+};
+
+export type ResolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePostResponse = ResolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePostResponses[keyof ResolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePostResponses];
+
 export type GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetData = {
     body?: never;
     path: {
@@ -4740,6 +4814,68 @@ export type GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGet
 };
 
 export type GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetResponse = GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetResponses[keyof GetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetResponses];
+
+export type CancelRunApiV1ConversationsConversationIdRunsRunIdCancelPostData = {
+    body?: never;
+    path: {
+        /**
+         * Conversation Id
+         */
+        conversation_id: string;
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: never;
+    url: '/api/v1/conversations/{conversation_id}/runs/{run_id}/cancel';
+};
+
+export type CancelRunApiV1ConversationsConversationIdRunsRunIdCancelPostErrors = {
+    /**
+     * RFC 9457 error response (400)
+     */
+    400: ProblemDetails;
+    /**
+     * RFC 9457 error response (401)
+     */
+    401: ProblemDetails;
+    /**
+     * RFC 9457 error response (403)
+     */
+    403: ProblemDetails;
+    /**
+     * RFC 9457 error response (404)
+     */
+    404: ProblemDetails;
+    /**
+     * RFC 9457 error response (409)
+     */
+    409: ProblemDetails;
+    /**
+     * RFC 9457 error response (422)
+     */
+    422: ProblemDetails;
+    /**
+     * RFC 9457 error response (500)
+     */
+    500: ProblemDetails;
+    /**
+     * RFC 9457 error response (503)
+     */
+    503: ProblemDetails;
+};
+
+export type CancelRunApiV1ConversationsConversationIdRunsRunIdCancelPostError = CancelRunApiV1ConversationsConversationIdRunsRunIdCancelPostErrors[keyof CancelRunApiV1ConversationsConversationIdRunsRunIdCancelPostErrors];
+
+export type CancelRunApiV1ConversationsConversationIdRunsRunIdCancelPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunCancelledResponse;
+};
+
+export type CancelRunApiV1ConversationsConversationIdRunsRunIdCancelPostResponse = CancelRunApiV1ConversationsConversationIdRunsRunIdCancelPostResponses[keyof CancelRunApiV1ConversationsConversationIdRunsRunIdCancelPostResponses];
 
 export type GetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetData = {
     body?: never;
@@ -6533,119 +6669,3 @@ export type ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponses =
 };
 
 export type ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponse = ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponses[keyof ApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponses];
-
-export type ResolveQuestionApiV1QuestionsQuestionIdResolvePostData = {
-    body: QuestionResolutionRequest;
-    path: {
-        /**
-         * Question Id
-         */
-        question_id: string;
-    };
-    query?: never;
-    url: '/api/v1/questions/{question_id}/resolve';
-};
-
-export type ResolveQuestionApiV1QuestionsQuestionIdResolvePostErrors = {
-    /**
-     * RFC 9457 error response (400)
-     */
-    400: ProblemDetails;
-    /**
-     * RFC 9457 error response (401)
-     */
-    401: ProblemDetails;
-    /**
-     * RFC 9457 error response (403)
-     */
-    403: ProblemDetails;
-    /**
-     * RFC 9457 error response (404)
-     */
-    404: ProblemDetails;
-    /**
-     * RFC 9457 error response (409)
-     */
-    409: ProblemDetails;
-    /**
-     * RFC 9457 error response (422)
-     */
-    422: ProblemDetails;
-    /**
-     * RFC 9457 error response (500)
-     */
-    500: ProblemDetails;
-    /**
-     * RFC 9457 error response (503)
-     */
-    503: ProblemDetails;
-};
-
-export type ResolveQuestionApiV1QuestionsQuestionIdResolvePostError = ResolveQuestionApiV1QuestionsQuestionIdResolvePostErrors[keyof ResolveQuestionApiV1QuestionsQuestionIdResolvePostErrors];
-
-export type ResolveQuestionApiV1QuestionsQuestionIdResolvePostResponses = {
-    /**
-     * Successful Response
-     */
-    200: QuestionRequest;
-};
-
-export type ResolveQuestionApiV1QuestionsQuestionIdResolvePostResponse = ResolveQuestionApiV1QuestionsQuestionIdResolvePostResponses[keyof ResolveQuestionApiV1QuestionsQuestionIdResolvePostResponses];
-
-export type CancelRunApiV1RunsRunIdCancelPostData = {
-    body?: never;
-    path: {
-        /**
-         * Run Id
-         */
-        run_id: string;
-    };
-    query?: never;
-    url: '/api/v1/runs/{run_id}/cancel';
-};
-
-export type CancelRunApiV1RunsRunIdCancelPostErrors = {
-    /**
-     * RFC 9457 error response (400)
-     */
-    400: ProblemDetails;
-    /**
-     * RFC 9457 error response (401)
-     */
-    401: ProblemDetails;
-    /**
-     * RFC 9457 error response (403)
-     */
-    403: ProblemDetails;
-    /**
-     * RFC 9457 error response (404)
-     */
-    404: ProblemDetails;
-    /**
-     * RFC 9457 error response (409)
-     */
-    409: ProblemDetails;
-    /**
-     * RFC 9457 error response (422)
-     */
-    422: ProblemDetails;
-    /**
-     * RFC 9457 error response (500)
-     */
-    500: ProblemDetails;
-    /**
-     * RFC 9457 error response (503)
-     */
-    503: ProblemDetails;
-};
-
-export type CancelRunApiV1RunsRunIdCancelPostError = CancelRunApiV1RunsRunIdCancelPostErrors[keyof CancelRunApiV1RunsRunIdCancelPostErrors];
-
-export type CancelRunApiV1RunsRunIdCancelPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: RunCancelledResponse;
-};
-
-export type CancelRunApiV1RunsRunIdCancelPostResponse = CancelRunApiV1RunsRunIdCancelPostResponses[keyof CancelRunApiV1RunsRunIdCancelPostResponses];

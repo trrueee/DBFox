@@ -192,7 +192,9 @@ Schema 同步从目标数据库内省表、列、主外键和索引，写入 can
 SQL 领域语义属于 `dbfox.data`，不属于 Core。模型 SQL 只有一条执行链：
 `sql_validate` 生成不可变校验/SQL Artifact，`sql_execute_readonly` 只接受该
 Artifact，再执行方言解析、策略、只读/危险语句检查、projection/limit 约束、
-执行注册和结果序列化。Core 只强制通用的 Tool owner、资源、审批、取消、超时、
+执行注册和结果序列化。`sql_validate` 同时用当前 Catalog 校验引用表：Catalog 未就绪
+或资源版本不匹配时跳过校验而不是误报；未知表产生 warning，不单独阻止执行。
+Core 只强制通用的 Tool owner、资源、审批、取消、超时、
 幂等和结算合同，不解析 SQL。QueryRegistry 为 SQLite、DuckDB、PostgreSQL 和
 MySQL 提供各自可用的取消路径；无法硬中断的驱动仍受 deadline 和结算栅栏约束。
 
@@ -306,6 +308,11 @@ Landlock/seccomp/namespaces 等方案调查，正式结论为 NO-GO。普通 chi
 ### 10.2 Approval
 
 Policy 使用 canonical tool name 和授权后的输入判定风险。需要批准时持久化 Approval 并暂停同一个 Run。用户决定与 invocation/version/generation 绑定，不能批准后替换参数。批准、拒绝、取消和导出进入 SecurityAuditRecord。
+
+Approval、Question 与 Run cancel 的 HTTP 端点以 `conversation_id` 为路径归属：实体不属于该
+Conversation 时统一返回 404，不泄露其是否存在，也不在错误会话上产生任何状态变更。该约束是
+归属完整性边界，不改变本地运行 Token 的全权性质；Token 泄露仍是同机全权风险，需要单独的
+会话级 capability 设计才能收敛。
 
 Canonical Tool ID 在 Registry、模型 Provider、Policy、持久化和 Evaluation
 全链路保持同一个值，格式固定为 `^[A-Za-z0-9_-]{1,64}$`，例如

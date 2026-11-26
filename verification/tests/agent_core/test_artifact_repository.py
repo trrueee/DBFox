@@ -28,14 +28,17 @@ from engine.agent.definition import AgentDefinition
 from engine.agent.response import CompletionDisposition, CompletionLimitationCode
 from engine.agent.terminalizer import Terminalizer
 from engine.agent.tool_dispatcher import ToolDispatchOutcome, ToolDispatcher
+from engine.agent.tool_settlement import ToolSettlement
+from engine.agent.context import ContextAssembler, MAX_OBSERVATIONS
 from engine.agent.turn import ModelToolCall, ModelTurnResult, TurnAssistantMessage, TurnTermination
 from engine.agent.loop import RunLoop
 from engine.agent.completion import CompletionGate, CompletionPolicy
 from engine.json_codec import loads
-from engine.models import AgentArtifactRecord, AgentRun, AgentSession, AgentSessionInput, AgentToolInvocation, AgentTurn
+from engine.models import AgentArtifactRecord, AgentObservationRecord, AgentRun, AgentSession, AgentSessionInput, AgentToolInvocation, AgentTurn
 from engine.resource import ResourceScopeRef
 from engine.tools.materialization import materialize_tools
 from engine.tools.runtime import ToolExecutionSpec, ToolExecutor, ToolResourceRequirement
+from engine.tools.runtime.result import ToolResult
 from verification.support.agent_tools import verification_registry
 
 
@@ -108,6 +111,54 @@ def _active_run(db_session, session_id: str, *, materialization=None):
         model_name="test",
     )
     return admission, lease, turn
+
+
+def test_tool_settlement_rolls_back_artifacts_if_observation_projection_fails(db_session, monkeypatch):
+    admission, lease, turn = _active_run(db_session, "tool-settlement-rollback")
+    repository = ArtifactRepository(db_session)
+    invocation = _request(repository, lease=lease, run_id=admission.run_id, turn_id=str(turn.id))
+    db_session.commit()
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    tool = verification_registry().require(invocation.tool_name)
+
+    def fail_after_artifact_flush(*, artifacts, **_kwargs):
+        assert len(artifacts) == 1
+        raise RuntimeError("fault before Observation settlement")
+
+    monkeypatch.setattr(tool, "project_observation", fail_after_artifact_flush)
+    with pytest.raises(RuntimeError, match="fault before Observation settlement"):
+        ToolSettlement(session_factory=factory).settle(
+            lease, invocation, tool=tool, needs_reconciliation=False,
+            result=ToolResult(
+                name=invocation.tool_name, status="success", artifact_drafts=[_draft()], latency_ms=1,
+            ),
+        )
+
+    with factory() as reader:
+        assert ArtifactRepository(reader).list_for_run(admission.run_id) == []
+        assert reader.query(AgentObservationRecord).filter_by(run_id=admission.run_id).count() == 0
+        assert reader.get(AgentToolInvocation, invocation.id).status == "requested"
+
+
+def test_completion_reads_observations_older_than_the_prompt_window(db_session):
+    admission, lease, turn = _active_run(db_session, "old-completion-observation")
+    repository = ArtifactRepository(db_session)
+    for index in range(MAX_OBSERVATIONS + 1):
+        invocation = _request(repository, lease=lease, run_id=admission.run_id, turn_id=str(turn.id))
+        ToolInvocationRepository(db_session).settle(
+            lease=lease, invocation_id=invocation.id,
+            status=ObservationStatus.FAILED if index == 0 else ObservationStatus.SUCCEEDED,
+            model_visible_summary="Action outcome",
+        )
+    db_session.commit()
+
+    assembler = ContextAssembler(db_session)
+    prompt = assembler.build(admission.run_id)
+    completion = assembler.for_completion(prompt)
+    assert len(prompt.observations) == MAX_OBSERVATIONS
+    assert all(item.status == "succeeded" for item in prompt.observations)
+    assert len(completion.observations) == MAX_OBSERVATIONS + 1
+    assert completion.observations[0].status == "failed"
 
 
 @pytest.mark.parametrize("boundary", ["removed", "changed_version"])
@@ -608,7 +659,7 @@ def test_forged_or_stale_derivation_cannot_inherit_authority(db_session, fault):
     elif fault == "failed":
         source_row.status = "failed"
     elif fault == "cross_run":
-        # A historical relation remains legal lineage but contributes no scope.
+        # Moving a row to a historical Run cannot forge its Invocation proof.
         other_run = AgentRun(id="old-source-run", session_id=lease.session_id,
                              input_id=admission.input_id, session_sequence=0, question="Old",
                              status="completed", request_json="{}")
@@ -624,6 +675,52 @@ def test_forged_or_stale_derivation_cannot_inherit_authority(db_session, fault):
         _settle(repository, lease=lease, invocation=invocation,
                 drafts=[_draft(refs=refs, relations=relations)])
     assert db_session.query(AgentArtifactRecord).count() == 1
+
+
+@pytest.mark.parametrize("boundary", ["allowed", "missing_grant", "changed_version", "internal", "failed_producer", "active_source", "future_source"])
+def test_historical_derivation_preserves_only_explicitly_readmitted_source_refs(db_session, boundary):
+    admission, lease, turn = _active_run(db_session, "historical-transform")
+    repository = ArtifactRepository(db_session)
+    producer = _request(repository, lease=lease, run_id=admission.run_id, turn_id=str(turn.id))
+    draft = _draft().model_copy(update={"visibility": ArtifactVisibility.INTERNAL}) if boundary == "internal" else _draft()
+    source = _settle(repository, lease=lease, invocation=producer, drafts=[draft])[0]
+    db_session.commit()
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    assert Terminalizer(session_factory=factory).complete(
+        lease, admission.run_id, ModelTurnResult(), disposition=CompletionDisposition.COMPLETE,
+        limitation_codes=[], evidence_artifact_ids=[],
+    )
+    db_session.expire_all()
+    sessions = SessionRepository(db_session)
+    sessions.release(lease=lease)
+    authority = (() if boundary == "missing_grant" else
+                 (RESOURCE.model_copy(update={"version": 2}),) if boundary == "changed_version" else (RESOURCE,))
+    consumer = sessions.admit(session_id=lease.session_id, resource_refs=authority, content="Transform selected prior work.",
+        idempotency_key="historical-consumer", llm_credential_id="credential", api_base=None, model_name="model", request_payload={})
+    current = sessions.claim(session_id=lease.session_id, owner="consumer")
+    sessions.promote_next_input(lease=current)
+    tools = _tools()
+    consumer_turn = sessions.start_turn(lease=current, run_id=consumer.run_id, agent_definition_version="1",
+        prompt_version="1", prompt_hash="prompt", context_snapshot={}, context_hash="context",
+        tool_materialization=tools.model_dump(mode="json"), tool_materialization_hash=tools.hash, provider="test", model_name="test")
+    if boundary == "failed_producer":
+        db_session.get(AgentToolInvocation, producer.id).status = "failed"
+    elif boundary == "active_source":
+        db_session.get(AgentRun, admission.run_id).status = "running"
+    elif boundary == "future_source":
+        db_session.get(AgentRun, admission.run_id).session_sequence = 100
+    transform = _request(repository, lease=current, run_id=consumer.run_id, turn_id=str(consumer_turn.id), refs=())
+    derived = _draft(relations=(ArtifactRelationDraft(relation=ArtifactRelationType.DERIVED_FROM, artifact_id=source.id),))
+    if boundary == "allowed":
+        result = _settle(repository, lease=current, invocation=transform, drafts=[derived])[0]
+        assert result.resource_refs == (RESOURCE,)
+        assert db_session.get(AgentToolInvocation, transform.id).resource_refs_json == "[]"
+        assert repository.available_artifact(session_id=current.session_id, current_run_id=consumer.run_id,
+                                             artifact_id=result.id) == result
+    else:
+        with pytest.raises(ArtifactDraftContractError):
+            _settle(repository, lease=current, invocation=transform, drafts=[derived])
+        assert len(repository.list_for_run(consumer.run_id)) == 0
 
 
 @pytest.mark.parametrize("fault", ["authority", "payload", "pointer"])

@@ -8,6 +8,7 @@
 
 ## 当前整改
 
+- [Agent 交付可靠性复审](./agent-delivery-verification.md) 汇总十三项核对、根因修复和真实模型验收。
 - Windows 实机、封装版进程树和开发反馈链的验证记录。[本机开发执行验收](./local-development-execution-verification.md)
 - [本地模型与 Data Phase 0](local-data-phase0.md)：当前 4B 实机基线、可靠性修复、评测装配、写锁测量和下一阶段边界。
 - [Apple HIG 工作台设计与验收](./apple-hig-workbench-20261107.md)：当前全产品设计基础；覆盖逐功能任务、渐进展开、焦点与反馈、统一图标和 13 个内置 DLC，并记录真实客户端发现的数据样例合同缺口。

@@ -15,6 +15,7 @@ from verification.bench.capabilities.dbfox_data.agent.comparison import (
 )
 from verification.bench.catalog import SUITES
 from verification.bench.framework.comparison import compare_summaries, load_summary
+from verification.bench.framework.reporting import all_trials_passed
 from verification.bench.framework.schema import load_suite_manifest
 
 
@@ -142,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
         case_ids=frozenset(args.case),
     )
     print(f"REPORT={output / 'report.md'}")
-    return 0 if summary["passed_trials"] == summary["scored_trials"] else 1
+    return 0 if all_trials_passed(summary) else 1
 
 
 if __name__ == "__main__":

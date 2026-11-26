@@ -266,6 +266,7 @@ def run_segment(runtime: ShaderRuntime, case: ShaderCase, *, repetition=1, scrip
         evidence = {
             "project_id": project_id, "session_id": session_id, "run_id": admission.run_id,
             "run_status": str(run.status), "answer": str(answer.content or ""), "package_digest": runtime.package.package_digest,
+            "completion_disposition": json.loads(run.result_json or "{}").get("completion_disposition"),
             "invocations": [{"id": item.id, "call_id": item.provider_call_id, "tool": item.tool_name,
                 "run_id": item.run_id, "session_id": item.session_id, "owner": item.owner_id,
                 "package_digest": item.package_digest, "status": item.status, "attempts": item.attempt_count,
@@ -290,7 +291,8 @@ def run_case(runtime: ShaderRuntime, case: ShaderCase, *, repetition=1):
     from .scoring import score_case
     evidence, script = run_segment(runtime, case, repetition=repetition)
     evidence["runs"] = [{"id": evidence["run_id"], "status": evidence["run_status"], "answer": evidence["answer"]}]
-    while script.index < len(case.steps) and evidence["run_status"] == "completed":
+    while (case.clarification and script.index < len(case.steps)
+           and evidence["completion_disposition"] == "complete"):
         before = script.index
         continuation, script = run_segment(runtime, case, repetition=repetition, script=script,
             project_id=evidence["project_id"], session_id=evidence["session_id"])
@@ -300,7 +302,7 @@ def run_case(runtime: ShaderRuntime, case: ShaderCase, *, repetition=1):
             evidence[field].extend(continuation[field])
         for field in ("turns", "latency_ms"):
             evidence[field] += continuation[field]
-        for field in ("human_edits", "requests", "run_status", "answer", "max_observation_bytes", "max_prompt_bytes"):
+        for field in ("human_edits", "requests", "run_status", "completion_disposition", "answer", "max_observation_bytes", "max_prompt_bytes"):
             evidence[field] = continuation[field]
     evidence["observed_summary"] = script.summary
     evidence["provider_observations"] = script.observations

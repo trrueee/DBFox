@@ -24,7 +24,7 @@ disallow_untyped_defs = true
 disallow_any_generics = true
 
 [tool.pytest.ini_options]
-addopts = ["--import-mode=importlib"]
+addopts = ["--import-mode=importlib", "--strict-markers"]
 testpaths = ["verification/tests"]
 python_files = ["test_*.py"]
 norecursedirs = [

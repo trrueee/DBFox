@@ -98,11 +98,9 @@ class ContextBudgetSegment:
     prefix: str = ""
     suffix: str = ""
     required: bool = False
-    truncatable: bool = False
 
-    def render(self, payload: str | None = None) -> dict[str, Any]:
-        value = self.payload if payload is None else payload
-        return {"role": self.role, "content": f"{self.prefix}{value}{self.suffix}"}
+    def render(self) -> dict[str, Any]:
+        return {"role": self.role, "content": f"{self.prefix}{self.payload}{self.suffix}"}
 
 
 class ContextBudgetExceeded(ValueError):
@@ -130,31 +128,9 @@ class ContextBudgetResult:
         }
 
 
-def _truncate_segment(
-    segment: ContextBudgetSegment,
-    token_budget: int,
-) -> dict[str, Any] | None:
-    marker = "\n[context truncated by runtime budget]"
-    fixed = segment.render("")
-    fixed_cost = estimate_message_tokens(fixed) + estimate_text_tokens(marker)
-    if token_budget <= fixed_cost:
-        return None
-    payload_budget = token_budget - fixed_cost
-    low, high = 0, len(segment.payload)
-    while low < high:
-        middle = (low + high + 1) // 2
-        if estimate_text_tokens(segment.payload[:middle]) <= payload_budget:
-            low = middle
-        else:
-            high = middle - 1
-    if low <= 0:
-        return None
-    return segment.render(segment.payload[:low].rstrip() + marker)
-
-
 class ContextBudgetPlanner:
     def __init__(self, *, max_prompt_tokens: int) -> None:
-        self.max_prompt_tokens = max(1_024, int(max_prompt_tokens))
+        self.max_prompt_tokens = int(max_prompt_tokens)
 
     def fit(
         self,
@@ -172,31 +148,16 @@ class ContextBudgetPlanner:
         required = [(index, item) for index, item in enumerate(segments) if item.required]
         selected: dict[int, dict[str, Any]] = {}
         consumed = 0
-        truncated = 0
-
-        # Required segments preserve their declared order. Trusted system policy
-        # is never silently truncated; user payloads may be safely shortened
-        # inside their complete structural wrapper.
+        # Trusted policy and the admitted request must both fit in full.
         for index, segment in required:
             message = segment.render()
             cost = estimate_message_tokens(message)
-            remaining = available - consumed
-            if cost <= remaining:
-                selected[index] = message
-                consumed += cost
-                continue
-            if not segment.truncatable:
+            if consumed + cost > available:
                 raise ContextBudgetExceeded(
                     f"Required {segment.kind.value} exceeds the model input budget"
                 )
-            shortened = _truncate_segment(segment, remaining)
-            if shortened is None:
-                raise ContextBudgetExceeded(
-                    f"Required {segment.kind.value} cannot retain a valid envelope"
-                )
-            selected[index] = shortened
-            consumed += estimate_message_tokens(shortened)
-            truncated += 1
+            selected[index] = message
+            consumed += cost
 
         optional = [
             (index, item)
@@ -226,5 +187,5 @@ class ContextBudgetPlanner:
             reserved_tokens=reserved,
             max_prompt_tokens=self.max_prompt_tokens,
             omitted_messages=omitted,
-            truncated_messages=truncated,
+            truncated_messages=0,
         )

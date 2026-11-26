@@ -31,6 +31,7 @@ class LlmTestRequest(BaseModel):
     llm_credential_id: str = Field(min_length=1, max_length=256)
     api_base: str = Field(min_length=1, max_length=2_048)
     model_name: str | None = Field(default=None, max_length=256)
+    provider: Literal["openai-responses", "openai-chat"] = "openai-responses"
 
 
 class LlmTestResponse(BaseModel):
@@ -139,14 +140,23 @@ def api_local_model_test(request: Request) -> LocalModelTestResponse:
     )
 
 
-def _probe_llm_service(*, client: Any, model_name: str) -> None:
-    """Check the same native Responses endpoint used by the Agent runtime."""
+def _probe_llm_service(
+    *, client: Any, model_name: str, provider: str = "openai-responses"
+) -> None:
+    """Check the wire protocol the selected Run will actually use."""
+    if provider == "openai-chat":
+        client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=16,
+        )
+        return
     client.responses.create(model=model_name, input="ping", max_output_tokens=16, store=False)
 
 
 @router.post("/agent/llm/test", response_model=LlmTestResponse, dependencies=[Depends(_require_cloud_mode)])
 def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
-    """Test the exact Responses capability required by the Agent runtime.
+    """Probe the selected protocol and credentials for a model endpoint.
 
     This endpoint resolves an opaque credential through the local OS vault and
     validates that it can reach the target LLM service.
@@ -163,7 +173,11 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
             api_base=config.api_base,
             timeout=10.0,
         )
-        _probe_llm_service(client=client, model_name=config.model_name)
+        _probe_llm_service(
+            client=client,
+            model_name=config.model_name,
+            provider=req.provider,
+        )
         latency_ms = int((_time.monotonic() - t0) * 1000)
         return LlmTestResponse(
             ok=True,

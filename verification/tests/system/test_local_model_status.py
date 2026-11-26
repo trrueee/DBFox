@@ -8,7 +8,46 @@ from types import SimpleNamespace
 import pytest
 
 from engine.llm.endpoint_policy import ResolvedLlmEndpoint
-from engine.llm.local_model import ManagedLocalModel
+from engine.llm.local_model import LocalModelProfile, ManagedLocalModel
+
+
+@pytest.mark.parametrize(("context", "output"), [(8192, 2048), (16384, 4096), (32768, 8192)])
+def test_local_output_reserve_supports_file_generation_and_smaller_existing_profiles(tmp_path, context, output):
+    profile = LocalModelProfile(
+        model_name="verification:local", model_digest="a" * 64, model_size_bytes=1,
+        executable=tmp_path / "ollama.exe", models_dir=tmp_path, state_dir=tmp_path,
+        scratch_dir=tmp_path, context_length=context,
+    )
+    assert profile.output_token_limit == output
+
+
+def test_local_composition_allows_buffered_calls_within_the_existing_turn_deadline(tmp_path):
+    from engine.dlc import BuiltinContributionSet, ContributionCompiler
+    from engine.runtime_composition import build_product_run_loop
+
+    profile_path = tmp_path / "local-model.json"
+    profile_path.write_text(LocalModelProfile(
+        model_name="verification:local", model_digest="a" * 64, model_size_bytes=1,
+        executable=tmp_path / "ollama.exe", models_dir=tmp_path, state_dir=tmp_path,
+        scratch_dir=tmp_path, context_length=32768,
+    ).model_dump_json(), encoding="utf-8")
+    model = ManagedLocalModel(profile_path)
+    snapshot = ContributionCompiler(tmp_path / "dlcs").compile(built_ins=BuiltinContributionSet())
+    loop = build_product_run_loop(session_factory=lambda: pytest.fail("Composition must not execute a Run"),
+                                  snapshot=snapshot, local_model=model)
+    try:
+        limits = loop.definition.limits
+        assert limits.model_turn_timeout_seconds == 240
+        assert limits.model_request_timeout_seconds == limits.model_turn_timeout_seconds
+        assert limits.model_first_event_timeout_seconds == limits.model_turn_timeout_seconds
+        assert limits.model_stream_idle_timeout_seconds == limits.model_turn_timeout_seconds
+        assert limits.timeout_seconds == 900
+        assert limits.max_provider_retries == 2
+        assert limits.max_stalled_turns == 2
+        assert limits.max_prompt_tokens == 23552
+    finally:
+        loop.close()
+        model.close()
 
 
 @pytest.mark.parametrize(("has_process", "exit_code", "closed", "available"), [

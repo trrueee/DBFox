@@ -6,6 +6,8 @@
  * (`POST /agent/llm/models`) and merged into the model selector at runtime.
  */
 
+import type { LlmProviderProtocol } from "./api/types/llmProtocol";
+
 export const DEFAULT_LLM_API_BASE = "https://api.openai.com/v1";
 
 export interface LlmProviderMeta {
@@ -58,6 +60,11 @@ export function detectProviderFromBaseUrl(apiBase: string): LlmProviderMeta | un
       return false;
     }
   });
+}
+
+/** Default applied only when the user selects an entry in the provider catalog. */
+export function providerPresetProtocol(provider: LlmProviderMeta): LlmProviderProtocol {
+  return provider.id === "openai" ? "openai-responses" : "openai-chat";
 }
 
 /* ── Derived model presets (kept for the settings form contract) ── */

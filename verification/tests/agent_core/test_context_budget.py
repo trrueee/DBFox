@@ -6,7 +6,7 @@ from engine.agent.context import (
     ContextSnapshot,
     ResponseItemBatch,
 )
-from engine.agent.context_budget import estimate_messages_tokens
+from engine.agent.context_budget import ContextBudgetExceeded, estimate_messages_tokens
 
 
 def test_responses_message_shorthand_uses_the_same_budget_as_explicit_messages() -> None:
@@ -57,7 +57,6 @@ def test_prompt_preserves_native_search_order_and_evicts_its_complete_turn() -> 
     full = PromptAssembler().assemble(definition=AgentDefinition(), context=snapshot, tool_schemas=tools)
     assert full.messages[-4:] == items
     assert full.budget["response_item_tokens"] > 6_000
-    from engine.agent.context_budget import ContextBudgetExceeded
     with pytest.raises(ContextBudgetExceeded, match="latest complete"):
         PromptAssembler().assemble(
             definition=AgentDefinition(limits=RunLimits(max_prompt_tokens=4_096)),
@@ -280,7 +279,7 @@ def test_observations_are_internal_state_not_duplicate_model_messages() -> None:
     assert "old-0" not in encoded
 
 
-def test_budget_truncates_only_request_payload_and_keeps_complete_envelope() -> None:
+def test_current_request_budget_requires_the_complete_request() -> None:
     snapshot = ContextSnapshot(
         session_id="session",
         run_id="run",
@@ -290,14 +289,10 @@ def test_budget_truncates_only_request_payload_and_keeps_complete_envelope() -> 
         sources=[],
         hash="hash",
     )
-    plan = snapshot.model_message_plan(
-        system_prompt="system",
-        max_prompt_tokens=1_024,
-    )
-    encoded = "\n".join(str(item["content"]) for item in plan.messages)
-
-    assert "context truncated by runtime budget" in encoded
-    assert "</dbfox_current_request>" in encoded
+    with pytest.raises(ContextBudgetExceeded, match="current_request"):
+        snapshot.model_message_plan(system_prompt="system", max_prompt_tokens=1_024)
+    plan = snapshot.model_message_plan(system_prompt="system", max_prompt_tokens=8_192)
+    assert snapshot.current_request in plan.messages[-1]["content"]
 
 
 def test_workspace_context_is_sent_to_the_model_as_untrusted_context() -> None:
@@ -324,3 +319,16 @@ def test_workspace_context_is_sent_to_the_model_as_untrusted_context() -> None:
     assert '<dbfox_context source="workspace_context">' in encoded
     assert "SELECT count(*) FROM orders" in encoded
     assert "SELECT count(*) FROM orders" not in plan.messages[0]["content"]
+
+def test_explicit_prompt_limit_overrides_the_definition_cap() -> None:
+    from engine.agent.definition import AgentDefinition
+    from engine.agent.prompt import PromptAssembler
+
+    snapshot = ContextSnapshot(
+        session_id="s", run_id="r", context_epoch=0, current_request="hi",
+        messages=[], sources=[], hash="hash",
+    )
+    bundle = PromptAssembler().assemble(
+        definition=AgentDefinition(), context=snapshot, max_prompt_tokens=8_192,
+    )
+    assert bundle.budget["max_prompt_tokens"] == 8_192

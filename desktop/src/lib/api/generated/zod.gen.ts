@@ -656,7 +656,8 @@ export const zLlmModelsResponse = z.object({
 export const zLlmTestRequest = z.object({
     api_base: z.string().min(1).max(2048),
     llm_credential_id: z.string().min(1).max(256),
-    model_name: z.string().max(256).nullish()
+    model_name: z.string().max(256).nullish(),
+    provider: z.enum(['openai-responses', 'openai-chat']).optional().default('openai-responses')
 });
 
 /**
@@ -945,6 +946,7 @@ export const zConversationInputRequest = z.object({
     idempotency_key: z.string().min(8).max(256),
     llm_credential_id: z.string().min(1).max(256).nullish(),
     model_name: z.string().max(256).nullish(),
+    provider: z.enum(['openai-responses', 'openai-chat']).nullish(),
     references: z.array(zConversationInputReference).max(12).optional(),
     requested_resources: z.array(zRequestedResourceRef).max(16).nullish(),
     selected_artifact_ids: z.array(z.string()).max(20).optional(),
@@ -1540,17 +1542,6 @@ export const zApiLocalModelStatusApiV1AgentLocalModelGetResponse = zLocalModelSt
  */
 export const zApiLocalModelTestApiV1AgentLocalModelTestPostResponse = zLocalModelTestResponse;
 
-export const zResolveApprovalApiV1ApprovalsApprovalIdResolvePostBody = zApprovalResolutionRequest;
-
-export const zResolveApprovalApiV1ApprovalsApprovalIdResolvePostPath = z.object({
-    approval_id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zResolveApprovalApiV1ApprovalsApprovalIdResolvePostResponse = zApproval;
-
 export const zApiArtifactRepresentationsApiV1ArtifactsArtifactIdRepresentationsGetPath = z.object({
     artifact_id: z.string()
 });
@@ -1657,6 +1648,18 @@ export const zPatchConversationApiV1ConversationsConversationIdPatchPath = z.obj
  * Successful Response
  */
 export const zPatchConversationApiV1ConversationsConversationIdPatchResponse = zConversationSnapshotResponse;
+
+export const zResolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePostBody = zApprovalResolutionRequest;
+
+export const zResolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePostPath = z.object({
+    conversation_id: z.string(),
+    approval_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zResolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePostResponse = zApproval;
 
 export const zSelectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPostBody = zArtifactSelectionRequest;
 
@@ -1796,6 +1799,18 @@ export const zAdmitConversationInputApiV1ConversationsConversationIdInputsPostPa
  */
 export const zAdmitConversationInputApiV1ConversationsConversationIdInputsPostResponse = zConversationInputAcceptedResponse;
 
+export const zResolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePostBody = zQuestionResolutionRequest;
+
+export const zResolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePostPath = z.object({
+    conversation_id: z.string(),
+    question_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zResolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePostResponse = zQuestionRequest;
+
 export const zGetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetPath = z.object({
     conversation_id: z.string(),
     run_id: z.string()
@@ -1807,6 +1822,16 @@ export const zGetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsG
  * Successful Response
  */
 export const zGetRunArtifactsApiV1ConversationsConversationIdRunsRunIdArtifactsGetResponse = z.array(zArtifact);
+
+export const zCancelRunApiV1ConversationsConversationIdRunsRunIdCancelPostPath = z.object({
+    conversation_id: z.string(),
+    run_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zCancelRunApiV1ConversationsConversationIdRunsRunIdCancelPostResponse = zRunCancelledResponse;
 
 export const zGetRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGetPath = z.object({
     conversation_id: z.string(),
@@ -2074,23 +2099,3 @@ export const zApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetPath = z.
  * Successful Response
  */
 export const zApiListProjectResourcesApiV1ProjectsProjectIdResourcesGetResponse = z.array(zProjectResourceDescriptor);
-
-export const zResolveQuestionApiV1QuestionsQuestionIdResolvePostBody = zQuestionResolutionRequest;
-
-export const zResolveQuestionApiV1QuestionsQuestionIdResolvePostPath = z.object({
-    question_id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zResolveQuestionApiV1QuestionsQuestionIdResolvePostResponse = zQuestionRequest;
-
-export const zCancelRunApiV1RunsRunIdCancelPostPath = z.object({
-    run_id: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zCancelRunApiV1RunsRunIdCancelPostResponse = zRunCancelledResponse;

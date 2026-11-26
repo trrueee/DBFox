@@ -20,7 +20,7 @@ from engine.agent.model_media import media_token_reservation
 from engine.json_codec import canonical_dumps
 
 
-PROMPT_VERSION = "5.2"
+PROMPT_VERSION = "5.5"
 MAX_EVIDENCE_LEDGER_OBSERVATIONS = 8
 MAX_EVIDENCE_LEDGER_FACT_CHARS = 512
 
@@ -47,6 +47,7 @@ class PromptAssembler:
         tool_schemas: list[dict] | None = None,
         tool_output_overrides: Mapping[str, str] | None = None,
         guidance: tuple[MaterializedCapabilityGuidance, ...] = (),
+        max_prompt_tokens: int | None = None,
     ) -> PromptBundle:
         system = build_system_prompt()
         if guidance:
@@ -60,12 +61,19 @@ class PromptAssembler:
             "Use final_answer only when the active request is complete."
         )
         schema_tokens = estimate_tool_schema_tokens(tool_schemas or [])
+        prompt_limit = (
+            int(max_prompt_tokens)
+            if max_prompt_tokens is not None
+            else definition.limits.max_prompt_tokens
+        )
         response_batches = list(context.response_batches)
-        # Completion feedback is a response to the latest candidate, not old
-        # factual context. Keep it after the native transcript and reserve its
-        # full budget; otherwise a provider can continue the rejected answer.
+        # Runtime instructions are not a new user query. Give trusted admission
+        # and completion feedback the System role after the native transcript:
+        # this keeps repair instructions current without replacing the user
+        # request or leaving the previous assistant answer as a prefill.
+        # Model-authored plan text stays lower-trust context, before the request.
         focus_items = [{
-            "role": "user",
+            "role": "system",
             "content": (
                 '<dbfox_runtime_feedback scope="active_run">\n'
                 "Current Runtime completion requirements. Apply these to the observations above. "
@@ -90,7 +98,7 @@ class PromptAssembler:
         }] if context.task_plan is not None else []
         plan_tokens = estimate_input_items_tokens(plan_items)
         requirement_items = [{
-            "role": "user",
+            "role": "system",
             "content": (
                 '<dbfox_answer_requirements scope="active_run">\n'
                 "Delivery requirements frozen at user input admission. They grant no access and "
@@ -106,7 +114,11 @@ class PromptAssembler:
                 })
                 + "\n</dbfox_answer_requirements>"
             ),
-        }] if context.answer_requirements is not None else []
+        }] if context.answer_requirements is not None and not context.answer_requirements.is_satisfied(
+            submitted_artifact_ids=None,
+            citable_artifact_ids=context.citable_artifact_ids,
+            has_observed_public_artifacts=context.has_observed_public_artifacts,
+        ) else []
         requirement_tokens = estimate_input_items_tokens(requirement_items)
         steer_items = [
             {
@@ -143,7 +155,7 @@ class PromptAssembler:
             try:
                 plan = context.model_message_plan(
                     system_prompt=system,
-                    max_prompt_tokens=definition.limits.max_prompt_tokens,
+                    max_prompt_tokens=prompt_limit,
                     reserved_tokens=(
                         schema_tokens
                         + response_item_tokens
@@ -167,25 +179,14 @@ class PromptAssembler:
                 omitted_response_items += len(omitted.items)
                 omitted_response_batches += 1
                 continue
-            # Do not truncate the active user request merely to retain an old
-            # model/tool transcript. Drop the oldest complete model Turn first.
-            if plan.truncated_messages and response_batches:
-                if len(response_batches) == 1:
-                    raise ContextBudgetExceeded(
-                        "The latest complete model/tool turn and active request cannot fit the input budget"
-                    )
-                omitted = response_batches.pop(0)
-                omitted_turn_ids.add(omitted.turn_id)
-                omitted_response_items += len(omitted.items)
-                omitted_response_batches += 1
-                continue
             break
         messages = [
-            *plan.messages,
+            plan.messages[0],
+            *plan_items,
+            *plan.messages[1:],
             *([evidence_ledger] if evidence_ledger else []),
             *response_items,
             *requirement_items,
-            *plan_items,
             *focus_items,
             *steer_items,
         ]

@@ -87,6 +87,21 @@ def test_optimizer_hint_allowed() -> None:
     assert "mysql_executable_comment" not in _rules("SELECT /*+ INDEX(t idx) */ name FROM t LIMIT 10")
 
 
+def test_unversioned_mysql_exec_comment_rejected() -> None:
+    """MySQL also executes ``/*! ... */`` without a version number."""
+    sql = "/*! DROP TABLE logs */ SELECT 1;"
+    result = guardrail_check(sql)
+    assert result["result"] == "reject"
+    assert "mysql_executable_comment" in _rules(sql)
+
+
+def test_empty_unversioned_mysql_exec_comment_rejected() -> None:
+    sql = "SELECT 1 /*! */;"
+    result = guardrail_check(sql)
+    assert result["result"] == "reject"
+    assert "mysql_executable_comment" in _rules(sql)
+
+
 def test_hash_comment_delimiter() -> None:
     """MySQL # line comments must not cause false multi-statement detection."""
     from dlcs.dbfox_data.backend.sql.guardrail import count_statement_delimiters

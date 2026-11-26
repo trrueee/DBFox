@@ -9,6 +9,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from dbfox_dlc_api import ResourceScopeRef
+
 STORY_ROOT = Path(__file__).resolve().parents[3] / "dlcs" / "dbfox.story"
 if str(STORY_ROOT) not in sys.path:
     sys.path.insert(0, str(STORY_ROOT))
@@ -289,17 +291,20 @@ def test_chapter_updates_use_compare_and_swap_and_versions_can_be_restored(
 
 def test_story_completion_requires_graph_checks_before_and_after_write() -> None:
     constraint = StoryChapterConsistencyConstraint()
+    world = ResourceScopeRef(kind="dbfox.story.world", id="first-world", version=3)
     graph_before = SimpleNamespace(
         status="succeeded",
         sequence=1,
         capabilities=("dbfox.story.graph_check",),
         facts={"world_generation": 3},
+        resource_refs=(world,),
     )
     write = SimpleNamespace(
         status="succeeded",
         sequence=2,
         capabilities=("dbfox.story.chapter_write",),
         facts={"chapter": {"checked_world_generation": 3}},
+        resource_refs=(world,),
     )
     missing_after = constraint.evaluate(
         context=SimpleNamespace(observations=[graph_before, write]),
@@ -311,6 +316,7 @@ def test_story_completion_requires_graph_checks_before_and_after_write() -> None
         sequence=3,
         capabilities=("dbfox.story.graph_check",),
         facts={"world_generation": 4},
+        resource_refs=(world,),
     )
     drifted = constraint.evaluate(
         context=SimpleNamespace(observations=[graph_before, write, graph_after_drift]),
@@ -322,7 +328,20 @@ def test_story_completion_requires_graph_checks_before_and_after_write() -> None
         sequence=3,
         capabilities=("dbfox.story.graph_check",),
         facts={"world_generation": 3},
+        resource_refs=(world,),
     )
+    another_world = ResourceScopeRef(kind=world.kind, id="second-world", version=3)
+    other_scope = SimpleNamespace(**{**vars(graph_after), "resource_refs": (another_world,)})
+    wrong_world = constraint.evaluate(
+        context=SimpleNamespace(observations=[graph_before, write, other_scope]), model_result=None,
+    )
+    assert wrong_world.kind == "missing"
+    wrong_version = SimpleNamespace(**{
+        **vars(graph_after), "resource_refs": (world.model_copy(update={"version": "4"}),),
+    })
+    assert constraint.evaluate(
+        context=SimpleNamespace(observations=[graph_before, write, wrong_version]), model_result=None,
+    ).kind == "missing"
     complete = constraint.evaluate(
         context=SimpleNamespace(observations=[graph_before, write, graph_after]),
         model_result=None,

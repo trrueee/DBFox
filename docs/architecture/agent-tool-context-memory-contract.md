@@ -499,7 +499,7 @@ Run；相同工具输入和相同查询指纹的重复次数受独立门禁约�
 - [LangGraph：Persistence](https://docs.langchain.com/oss/python/langgraph/persistence)
 - [AutoGen：Managing State](https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/tutorial/state.html)
 
-## 工具输入纠正与文件编辑（Agent 4.6）
+## 工具输入纠正与文件编辑
 
 ### 当前调用与反馈边界
 

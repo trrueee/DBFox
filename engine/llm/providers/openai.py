@@ -124,13 +124,18 @@ def create_openai_responses_client(
     )
 
 
-def create_openai_responses_async_client(
+def create_openai_async_client(
     *,
     api_key: str,
     api_base: str,
     timeout: float = 120.0,
 ) -> "AsyncOpenAI":
-    """Build an async Responses client owned by one Agent adapter."""
+    """Build an async OpenAI-compatible client owned by one Agent adapter.
+
+    The same transport serves Responses and Chat Completions; the endpoint
+    admission check and the application-owned HTTP client stay identical so a
+    third-party base URL cannot silently bypass DNS/IP policy.
+    """
 
     from openai import AsyncOpenAI
 

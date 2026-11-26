@@ -111,12 +111,14 @@ export async function testLlmConnection(
   llmCredentialId: string,
   apiBase: string,
   modelName?: string,
+  provider: "openai-responses" | "openai-chat" = "openai-responses",
 ): Promise<LlmTestResponse> {
   const { data } = await apiLlmTestApiV1AgentLlmTestPost({
     body: {
       llm_credential_id: llmCredentialId,
       api_base: apiBase,
       model_name: modelName,
+      provider,
     },
     throwOnError: true,
   });

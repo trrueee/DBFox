@@ -77,16 +77,16 @@ def test_prompt_snapshot_uses_the_current_durable_plan_without_its_original_tool
     assert "pending" in rendered
 
 
-def test_current_plan_follows_old_native_outputs_and_retains_its_own_budget(db_session, declared_plan):
+def test_current_plan_is_scoped_context_and_retains_its_own_budget(db_session, declared_plan):
     _lease, run_id, _turn, _plan = declared_plan
     old = {"type": "message", "role": "assistant", "content": "An older plan was complete."}
     snapshot = ContextAssembler(db_session).build(run_id).model_copy(update={
         "response_batches": [ResponseItemBatch(turn_id="old", items=[old])],
     })
     bundle = PromptAssembler().assemble(definition=DEFAULT_AGENT_DEFINITION, context=snapshot)
-    assert bundle.messages[-2] == old
-    assert '<dbfox_current_task_plan scope="active_run">' in bundle.messages[-1]["content"]
-    assert '"pending"' in bundle.messages[-1]["content"]
+    assert bundle.messages[-1] == old
+    assert '<dbfox_current_task_plan scope="active_run">' in bundle.messages[1]["content"]
+    assert '"pending"' in bundle.messages[1]["content"]
     assert bundle.budget["task_plan_tokens"] > 0
     assert '"pending"' not in bundle.system_prompt
 

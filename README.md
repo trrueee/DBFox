@@ -61,7 +61,7 @@ DBFox 目前处于持续开发阶段。Windows x64、macOS arm64 与 Ubuntu x64 
 | --- | --- |
 | Agent 运行时（Core） | 基于 OpenAI Responses 工具调用合同执行多轮 Agent Turn：计划、工具调用、审批、取消、部分完成与最终回答；事件持久化并支持 SSE 恢复。 |
 | 项目工作区（Core） | 项目分组侧栏：每个项目聚合自己的对话与资源，项目管理页盘点各 DLC 配置的资源和移除入口。 |
-| 模型服务（Core） | 连接 OpenAI 兼容服务；模型列表从所连服务实时获取，内置中外厂商目录与自定义名称兜底，凭据只进系统凭据库。 |
+| 模型服务（Core） | 支持受管理的本地 Ollama 和远端 Responses / Chat Completions。远端在模型设置中选择接口协议，服务需支持流式输出及任务所需的工具调用。凭据仅保存在系统凭据库。 |
 | 数据能力（Data DLC） | 管理 MySQL、PostgreSQL、SQLite 和 DuckDB 连接，浏览 schema 与目录，多标签 SQL 工作台（安全校验、只读执行、分页、导出），结果以可追溯 Artifact 呈现。 |
 | 工作区绑定（Workspace DLC） | 将本地目录绑定到项目，提供文件列举与读取能力。 |
 | 更多 DLC | 音乐作曲（Music）、可视化（Visualization）、GitHub 仓库绑定等，按同一扩展合同接入。 |

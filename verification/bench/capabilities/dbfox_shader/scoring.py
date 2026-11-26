@@ -62,6 +62,10 @@ def score_case(runtime, case, evidence, repetition):
     invocations = {item["call_id"]: item for item in evidence["invocations"]}
     observations = evidence["provider_observations"]
     expected = [step for step in case.steps if step.kind == "tool"]
+    last_expected_tool_outcomes = {step.tool: step.succeeds for step in expected}
+    checks["completion_disposition"] = evidence.get("completion_disposition") == (
+        "complete" if all(last_expected_tool_outcomes.values()) else "bounded_partial"
+    )
     checks["exact_tool_sequence"] = list(invocations) == [step.id for step in expected]
     checks["package_owner_and_no_replay"] = all(item["owner"] == OWNER and item["package_digest"] == evidence["package_digest"] and item["attempts"] == 1 for item in invocations.values())
     checks["studio_authority"] = all(len(item["resource_refs"]) == 1 and item["resource_refs"][0]["kind"] == OWNER + ".studio" and item["resource_refs"][0]["id"] == evidence["project_id"] for item in invocations.values())

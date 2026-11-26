@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.agent.answer_requirements import AnswerRequirements
@@ -52,6 +54,7 @@ class ConversationInputRequest(BaseModel):
     llm_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
     api_base: str | None = Field(default=None, max_length=2048)
     model_name: str | None = Field(default=None, max_length=256)
+    provider: Literal["openai-responses", "openai-chat"] | None = None
     answer_requirements: AnswerRequirements | None = None
 
 
