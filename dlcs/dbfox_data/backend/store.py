@@ -799,8 +799,8 @@ class DataStateStore:
             return set()
         workbook = self.get_workbook(database_id)
         if workbook is not None:
-            available = {"data", "main.data"}
-            return {name for name in names if name.casefold() in available}
+            workbook_table_names = {"data", "main.data"}
+            return {name for name in names if name.casefold() in workbook_table_names}
         lookup_names = names if case_sensitive else frozenset(name.lower() for name in names)
         placeholders = ",".join("?" for _ in lookup_names)
         table_expression = "table_name" if case_sensitive else "lower(table_name)"
