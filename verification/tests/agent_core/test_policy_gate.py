@@ -155,17 +155,41 @@ def test_input_diagnostics_do_not_reflect_unknown_keys_or_grow_with_them(db_sess
     assert len(decision.reason) <= 2048
 
 
-def test_input_diagnostics_keep_declared_nested_locations_but_not_dynamic_keys(db_session):
+@pytest.mark.parametrize("citation", [123, {"artifact_id": "PRIVATE_REFERENCE"}])
+def test_input_diagnostics_keep_declared_nested_locations_but_not_dynamic_keys(db_session, citation):
     from engine.tools.builtin.control import SubmitAnswerCommand
 
     registry = ToolRegistry().register(SubmitAnswerCommand())
     decision = PolicyGate(registry, db_session).check(
         _state(), "submit_answer",
-        {"parts": [{"text": "PRIVATE_BODY", "citations": [123], "SECRET_NESTED_KEY": True}]},
+        {"parts": [{"text": "PRIVATE_BODY", "citations": [citation], "SECRET_NESTED_KEY": True}]},
     )
     assert "parts.0.citations.0 (string_type)" in decision.reason
+    assert "supply a JSON string value, not an object or array" in decision.reason
     assert "SECRET_NESTED_KEY" not in decision.reason
     assert "PRIVATE_BODY" not in decision.reason
+    assert "PRIVATE_REFERENCE" not in decision.reason
+
+
+def test_container_diagnostics_explain_native_json_types_without_converting_or_echoing_values(db_session):
+    class ContainerInput(ToolInputModel):
+        values: list[str]
+        metadata: dict[str, int]
+
+    class ContainerTool(PolicyTestTool):
+        input_model = ContainerInput
+
+    decision = PolicyGate(ToolRegistry().register(ContainerTool()), db_session).check(
+        _state(), "policy_test", {"values": '["PRIVATE_ARRAY"]', "metadata": '{"PRIVATE_KEY":1}'},
+    )
+    assert decision.status == "blocked"
+    assert decision.error_code == "TOOL_INPUT_INVALID"
+    assert decision.safe_args == {}
+    assert "values (list_type): supply a JSON array" in decision.reason
+    assert "metadata (dict_type): supply a JSON object" in decision.reason
+    assert "not a JSON-encoded string" in decision.reason
+    assert "PRIVATE_ARRAY" not in decision.reason
+    assert "PRIVATE_KEY" not in decision.reason
 
 
 def test_input_diagnostics_preserve_schema_declared_discriminator_labels(db_session):

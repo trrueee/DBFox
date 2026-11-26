@@ -20,7 +20,11 @@ class AnswerPart(ToolInputModel):
     )
     citations: list[Annotated[str, Field(pattern=r"^artifact_[A-Za-z0-9_-]+$", max_length=128)]] = Field(
         default_factory=list, max_length=8,
-        description="Exact observed Artifact IDs supporting this fragment; not Evidence IDs or permissions.",
+        description=(
+            "JSON array of exact observed Artifact ID strings supporting this fragment. "
+            "Put source IDs here, not in text. Use [] only for a fragment without source claims. "
+            "Not Evidence IDs, filenames, paths or permissions."
+        ),
     )
 
     @model_validator(mode="after")
@@ -37,7 +41,12 @@ class AnswerPart(ToolInputModel):
 class AnswerSubmission(ToolInputModel):
     parts: list[AnswerPart] = Field(
         min_length=1, max_length=64,
-        description="The complete answer in reading order, with citations attached to the supported fragments.",
+        description=(
+            "JSON array of objects, each with text and citations. "
+            'Shape: [{"text":"Supported finding.","citations":["<exact observed Artifact ID>"]}]. '
+            "Use actual observed IDs, never the example placeholder. "
+            "The complete answer in reading order; not a JSON-encoded string."
+        ),
     )
 
     @model_validator(mode="after")

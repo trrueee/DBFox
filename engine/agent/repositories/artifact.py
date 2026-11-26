@@ -112,7 +112,10 @@ class _ArtifactSourceProof:
         self.nodes = 0
         self.edges = 0
 
-    def prove(self, artifact_id: str, depth: int = 0) -> tuple[ResourceScopeRef, ...]:
+    def prove(
+        self, artifact_id: str, depth: int = 0, *, source_run_id: str | None = None,
+    ) -> tuple[ResourceScopeRef, ...]:
+        expected_run_id = source_run_id or self.run_id
         if depth > MAX_SOURCE_PROOF_DEPTH:
             raise ArtifactDraftContractError("Artifact source proof exceeds its depth budget")
         if artifact_id in self.visiting:
@@ -137,7 +140,7 @@ class _ArtifactSourceProof:
                 row = self.session.get(AgentArtifactRecord, artifact_id)
                 if (
                     row is None or row.session_id != self.session_id
-                    or row.run_id != self.run_id
+                    or row.run_id != expected_run_id
                     or row.status != ArtifactStatus.COMPLETED.value
                 ):
                     raise ArtifactDraftContractError("Artifact source is unavailable in this Run")
@@ -150,7 +153,7 @@ class _ArtifactSourceProof:
                     raise ArtifactDraftContractError("Artifact source has no Invocation provenance")
                 producer = _require_invocation(
                     self.session, invocation_id=invocation_id,
-                    session_id=self.session_id, run_id=self.run_id,
+                    session_id=self.session_id, run_id=expected_run_id,
                     turn_id=str(row.turn_id), tool_name=tool_name,
                 )
                 if producer.status != "succeeded":
@@ -173,10 +176,31 @@ class _ArtifactSourceProof:
                     source = self.session.get(AgentArtifactRecord, source_id)
                     if source is None or source.session_id != self.session_id:
                         raise ArtifactDraftContractError("Artifact derived_from source is unavailable")
-                    if source.run_id != self.run_id:
-                        # Historical lineage is not authority for this Run.
+                    if source.run_id != producer.run_id:
+                        # A historical relation cannot grant execution access.
+                        # It may preserve source labels only after exact fresh
+                        # admission into this consumer Run and source proof.
+                        if all(ref in authorized for ref in refs):
+                            continue
+                        consumer_run = self.session.get(AgentRun, str(producer.run_id))
+                        source_run = self.session.get(AgentRun, str(source.run_id))
+                        if (
+                            consumer_run is None or source_run is None
+                            or source_run.session_id != self.session_id
+                            or consumer_run.session_id != self.session_id
+                            or source_run.status not in {"completed", "failed", "cancelled"}
+                            or int(source_run.session_sequence or 0) >= int(consumer_run.session_sequence or 0)
+                            or ArtifactRepository._domain(source).visibility is ArtifactVisibility.INTERNAL
+                        ):
+                            continue
+                        historical_refs = self.prove(
+                            source_id, depth + 1, source_run_id=str(source.run_id),
+                        )
+                        admitted = set(resource_refs_for_run(self.session, consumer_run))
+                        if all(ref in admitted for ref in historical_refs):
+                            authorized.update(historical_refs)
                         continue
-                authorized.update(self.prove(source_id, depth + 1))
+                authorized.update(self.prove(source_id, depth + 1, source_run_id=str(producer.run_id)))
             if any(ref not in authorized for ref in refs):
                 raise ArtifactDraftContractError(
                     "Artifact resource_refs exceed its Invocation and explicit derived_from sources"
@@ -593,41 +617,37 @@ class ArtifactRepository:
     def referenced_artifacts_for_run(self, run_id: str) -> list[Artifact]:
         """Return prior Artifacts explicitly observed by this Run."""
 
-        return [artifact for artifact in self.observed_artifacts_for_run(run_id) if artifact.run_id != run_id]
+        sources, _ = self.observed_public_sources(run_id)
+        return [artifact for artifact in sources if artifact.run_id != run_id]
 
-    def observed_artifacts_for_run(self, run_id: str) -> list[Artifact]:
-        """Resolve successful observations through the existing Artifact access fence."""
+    def observed_public_sources(self, run_id: str) -> tuple[list[Artifact], bool]:
+        """Return currently citable sources and whether this Run observed a public source."""
 
         current_run = self.session.get(AgentRun, run_id)
         if current_run is None:
-            return []
+            return [], False
+        session_id = str(current_run.session_id)
         artifacts: list[Artifact] = []
+        observed_public = False
         for artifact_id in self._observed_artifact_ids(run_id):
+            row = self.session.get(AgentArtifactRecord, artifact_id)
+            if (row is None or str(row.session_id) != session_id
+                    or row.status != ArtifactStatus.COMPLETED.value
+                    or self._visibility(row) is ArtifactVisibility.INTERNAL):
+                continue
+            # A prior observation still triggers a frozen evidence requirement
+            # when its resource is no longer accessible to the Run.
+            observed_public = True
             artifact = self.available_artifact(
                 current_run_id=run_id, artifact_id=artifact_id,
-                session_id=str(current_run.session_id),
+                session_id=session_id,
             )
             if artifact is not None:
                 artifacts.append(artifact)
-        return artifacts
-
-    def has_observed_public_artifacts(self, run_id: str) -> bool:
-        """Observation is a historical fact even if access is later revoked."""
-        current_run = self.session.get(AgentRun, run_id)
-        if current_run is None:
-            return False
-        ids = self._observed_artifact_ids(run_id)
-        if not ids:
-            return False
-        rows = self.session.scalars(select(AgentArtifactRecord).where(
-            AgentArtifactRecord.id.in_(ids),
-            AgentArtifactRecord.session_id == current_run.session_id,
-            AgentArtifactRecord.status == ArtifactStatus.COMPLETED.value,
-        ))
-        return any(self._domain(row).visibility is not ArtifactVisibility.INTERNAL for row in rows)
+        return artifacts, observed_public
 
     def _observed_artifact_ids(self, run_id: str) -> list[str]:
-        referenced_ids: list[str] = []
+        referenced_ids: dict[str, None] = {}
         rows = self.session.execute(
             select(AgentObservationRecord.artifact_ids_json)
             .where(
@@ -642,21 +662,25 @@ class ArtifactRepository:
                 continue
             for value in values:
                 artifact_id = str(value).strip()
-                if artifact_id and artifact_id not in referenced_ids:
-                    referenced_ids.append(artifact_id)
-        return referenced_ids
+                if artifact_id:
+                    referenced_ids[artifact_id] = None
+        return list(referenced_ids)
+
+    @staticmethod
+    def _visibility(row: AgentArtifactRecord) -> ArtifactVisibility:
+        presentation = _loads(str(row.presentation_json or "{}"), {})
+        try:
+            return ArtifactVisibility(str(
+                presentation.get("visibility") if isinstance(presentation, dict) else None
+            ))
+        except (TypeError, ValueError):
+            return default_artifact_visibility(str(row.type))
 
     @staticmethod
     def _domain(row: AgentArtifactRecord) -> Artifact:
         artifact_type = str(row.type)
         schema_version = int(row.schema_version or 1)
-        presentation = _loads(str(row.presentation_json or "{}"), {})
-        try:
-            visibility = ArtifactVisibility(str(
-                presentation.get("visibility") if isinstance(presentation, dict) else None
-            ))
-        except (TypeError, ValueError):
-            visibility = default_artifact_visibility(artifact_type)
+        visibility = ArtifactRepository._visibility(row)
         payload = _loads(str(row.payload_json or "{}"), {})
         # Unknown historical type/version keeps its envelope without guessing.
         validate_artifact_payload(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import pytest
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import sessionmaker
 
 from engine.agent.approval import ApprovalConflict, ApprovalStatus
@@ -86,6 +87,28 @@ def _cancel_with_terminalizer(db_session, *, sessions, admission, lease) -> None
     factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
     assert Terminalizer(session_factory=factory).cancelled(lease, admission.run_id) is True
     db_session.expire_all()
+
+
+def test_cancel_is_scoped_to_the_owning_conversation(db_session, test_resource) -> None:
+    sessions, admission, _lease, _turn = _start_run(
+        db_session,
+        test_resource,
+        session_id="cancel-scope",
+    )
+    db_session.commit()
+
+    with pytest.raises(NoResultFound):
+        RunRepository(db_session).request_cancel(
+            run_id=admission.run_id,
+            conversation_id="another-conversation",
+        )
+    db_session.rollback()
+    db_session.expire_all()
+
+    run = db_session.get(AgentRun, admission.run_id)
+    assert run is not None
+    assert run.status == "running"
+    assert run.cancel_requested is False
 
 
 def test_cancellation_terminalizes_pending_approval_and_blocks_late_resolution(

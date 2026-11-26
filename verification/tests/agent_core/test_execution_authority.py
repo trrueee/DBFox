@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from engine.agent.execution_authority import (
     ApprovalAuthorityError,
     ApprovalAuthorityVerifier,
+    ApprovalExpiredError,
 )
 from engine.agent.tool import ToolInvocation, ToolInvocationStatus
 from engine.policy.authority import canonical_hash
@@ -67,6 +69,7 @@ def _approval(invocation: ToolInvocation, decision: PolicyDecision):
             }
         ),
         policy_decision_json=decision.model_dump_json(),
+        expires_at=None,
     )
 
 
@@ -116,3 +119,45 @@ def test_stale_approval_cannot_authorize_changed_policy_contract(
                 kind="verification.resource", id="resource-1", version=generation
             ),
         )
+
+
+@pytest.mark.parametrize(
+    "expires_at",
+    [
+        datetime.now(UTC) - timedelta(seconds=1),
+        datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5),
+    ],
+)
+def test_expired_approval_grant_cannot_authorize_execution(expires_at: datetime) -> None:
+    decision = _decision()
+    invocation = _invocation(decision)
+    approval = _approval(invocation, decision)
+    approval.expires_at = expires_at
+
+    with pytest.raises(ApprovalExpiredError):
+        ApprovalAuthorityVerifier().verify(
+            invocation=invocation,
+            approval=approval,
+            decision=decision,
+            resource_ref=ResourceScopeRef(
+                kind="verification.resource", id="resource-1", version=4
+            ),
+        )
+
+
+def test_approval_grant_remains_valid_before_its_expiry() -> None:
+    decision = _decision()
+    invocation = _invocation(decision)
+    approval = _approval(invocation, decision)
+    approval.expires_at = datetime.now(UTC) + timedelta(minutes=1)
+
+    authority = ApprovalAuthorityVerifier().verify(
+        invocation=invocation,
+        approval=approval,
+        decision=decision,
+        resource_ref=ResourceScopeRef(
+            kind="verification.resource", id="resource-1", version=4
+        ),
+    )
+
+    assert authority.approval_id == "approval-1"

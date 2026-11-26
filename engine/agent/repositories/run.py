@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from sqlalchemy import select
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
 from engine.agent.events import RuntimeEventType
@@ -140,11 +141,16 @@ class RunRepository:
         ).scalar_one_or_none()
         return pending is not None
 
-    def request_cancel(self, *, run_id: str) -> AgentRun:
+    def request_cancel(
+        self, *, run_id: str, conversation_id: str | None = None
+    ) -> AgentRun:
         begin_agent_write(self.session)
         run = self.session.execute(
             select(AgentRun).where(AgentRun.id == run_id).with_for_update()
         ).scalar_one()
+        if conversation_id is not None and str(run.session_id) != conversation_id:
+            # A different conversation must not learn whether this Run exists.
+            raise NoResultFound("Run not found in this conversation")
         if RunStatus(str(run.status)) in TERMINAL_RUN_STATUSES:
             return run
         now = _utcnow()
@@ -432,7 +438,10 @@ class RunRepository:
             turn.error_message = "模型响应在完成前中断，Runtime 已从持久状态继续。"
             turn.reasoning_summary = "上次模型响应未完整结算，已从持久状态重新继续。"
             turn.completed_at = now
-            run.provider_retry_count = int(run.provider_retry_count or 0) + 1
+            # A process interruption is not a provider failure.  Keep the two
+            # budgets separate so repeated restarts cannot consume the retry
+            # allowance of a healthy provider stream (and vice versa).
+            run.recovery_count = int(run.recovery_count or 0) + 1
         run.current_turn_id = None
         run.version = int(run.version or 0) + 1
         run.updated_at = now
@@ -542,36 +551,21 @@ class RunRepository:
         )
 
     def latest_completed_answer(self, run_id: str) -> ModelTurnResult:
-        """Restore the latest eligible answer from canonical Turn and RunItem state."""
+        """Restore a candidate only if it belongs to the latest durable Turn."""
 
         turn = self.session.execute(
             select(AgentTurn)
-            .where(
-                AgentTurn.run_id == run_id,
-                AgentTurn.status == "completed",
-                AgentTurn.error_code.is_(None),
-                AgentTurn.tool_calls_json == "[]",
-                AgentTurn.termination == TurnTermination.COMPLETED.value,
-            )
+            .where(AgentTurn.run_id == run_id)
             .order_by(AgentTurn.sequence.desc())
             .limit(1)
         ).scalar_one_or_none()
-        submission_turn = self.session.execute(
-            select(AgentTurn).join(AgentToolInvocation, AgentToolInvocation.turn_id == AgentTurn.id)
-            .where(
-                AgentTurn.run_id == run_id,
-                AgentTurn.status == "completed",
-                AgentToolInvocation.owner_id == "dbfox.core",
-                AgentToolInvocation.tool_name == "submit_answer",
-                AgentToolInvocation.status == "succeeded",
-            ).order_by(AgentTurn.sequence.desc()).limit(1)
-        ).scalar_one_or_none()
-        if submission_turn is not None and (turn is None or submission_turn.sequence > turn.sequence):
-            submitted = self.submitted_answer_for_turn(run_id, str(submission_turn.id))
-            if submitted is not None:
-                return submitted
-        if turn is None:
+        if (
+            turn is None or turn.status != "completed" or turn.error_code is not None
+            or turn.termination != TurnTermination.COMPLETED.value
+        ):
             return ModelTurnResult()
+        if turn.tool_calls_json != "[]":
+            return self.submitted_answer_for_turn(run_id, str(turn.id)) or ModelTurnResult()
         prefix = f"message:{run_id}:{turn.id}:"
         records = (
             self.session.execute(
@@ -868,7 +862,7 @@ class RunRepository:
             if key not in {"verified_claims", "evidence_references"}
         }
         memory = {
-            "version": 1,
+            "version": 3,
             "working_set": {
                 "selected_artifact_id": (
                     response.selection_suggestion.artifact_id

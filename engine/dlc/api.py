@@ -131,7 +131,7 @@ class ExtensionToolRunContext(Protocol):
         ...
 
     def artifact(self, artifact_id: str) -> Artifact:
-        """Return one immutable Artifact only when it belongs to the invoking Run."""
+        """Return an immutable Artifact inside this Run's Session/resource fence."""
         ...
 
     def artifacts_relating_to(

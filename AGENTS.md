@@ -21,7 +21,7 @@ Python（仓库根运行）：
 
 ```powershell
 # 单个测试
-python -m pytest verification/tests/system/test_sql_safety_service.py -q --tb=short
+python -m pytest verification/tests/system/test_guardrail.py -q --tb=short
 
 # 后端核心回归（CI 同款 marker 排除）
 python -m pytest verification/tests/system -q --tb=short -m "not e2e and not integration and not real_llm and not migration and not engineering_contract and not platform_contract"
@@ -86,7 +86,7 @@ npm run build           # tsc -b + 构建脚本 + 生产 Token 与 bundle 预算
 
 ## 环境与测试怪癖
 
-- 根 `conftest.py` 在任何 DBFox 模块导入前设置 `DBFOX_RUNTIME_DIR`（进程独占临时目录）、
+- `verification/conftest.py` 在任何 DBFox 模块导入前设置 `DBFOX_RUNTIME_DIR`（进程独占临时目录）、
   `DBFOX_TESTING=1` 等隔离变量；pytest 必须从仓库根运行才能生效。
 - pytest markers：`e2e`、`integration`、`real_llm`、`migration`、`engineering_contract`、
   `platform_contract`、`slow`。默认本地验证跑确定性集合（排除外部服务标记）；CI 要求

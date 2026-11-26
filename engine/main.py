@@ -326,7 +326,7 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
 
     # 🔒 核心 Token 令牌安全校验
     token_header = request.headers.get("X-Local-Token", "")
-    if not secrets.compare_digest(token_header, LOCAL_SECURE_TOKEN):
+    if not secrets.compare_digest(token_header.encode("utf-8"), LOCAL_SECURE_TOKEN.encode("utf-8")):
         return problem_response(
             request,
             status=401,

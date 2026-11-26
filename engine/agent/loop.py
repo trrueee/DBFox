@@ -37,7 +37,12 @@ from engine.agent.definition import AgentDefinition, DEFAULT_AGENT_DEFINITION
 from engine.agent.events import LiveStreamHub
 from engine.agent.progress_guard import ProgressGuard
 from engine.agent.prompt import PromptAssembler
-from engine.agent.providers.openai import OpenAIModelAdapter
+from engine.agent.providers import (
+    PROVIDER_RESPONSES,
+    SUPPORTED_PROVIDERS,
+    build_provider_adapter,
+    project_tool_schemas,
+)
 from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
@@ -57,6 +62,7 @@ from engine.agent.turn import (
     TurnStreamCancelled,
     TurnStreamError,
     TurnStreamItem,
+    TurnTermination,
     ModelStreamTimeouts,
 )
 from engine.app.safe_errors import fixed_error_detail
@@ -65,6 +71,7 @@ from engine.llm.config import (
     resolve_product_llm_config_from_credential,
 )
 from engine.llm.endpoint_policy import LlmEndpointPolicyError
+from engine.llm.model_capabilities import resolve_model_limits
 from engine.json_codec import load_object
 from engine.models import AgentRun, AgentSessionInput, AgentTurn
 from engine.tools.materialization import ToolMaterialization, materialize_tools
@@ -94,15 +101,18 @@ class ProviderSettings(BaseModel):
     api_base: str | None = None
     model_name: str | None = None
     model_digest: str | None = None
+    provider: str = PROVIDER_RESPONSES
 
     @classmethod
     def from_run(cls, run: AgentRun) -> ProviderSettings:
         payload = load_object(str(run.request_json or "{}"))
+        explicit = str(payload.get("provider") or "").strip()
         return cls(
             credential_id=str(run.llm_credential_id) if run.llm_credential_id else None,
             api_base=str(run.api_base) if run.api_base else None,
             model_name=str(run.model_name) if run.model_name else None,
             model_digest=payload.get("model_digest"),
+            provider=explicit or PROVIDER_RESPONSES,
         )
 
 
@@ -124,20 +134,8 @@ class _ExecutionState:
     tool_count: int
     completed_turn_count: int
     finalizing: bool = False
-    last_result: ModelTurnResult = field(default_factory=ModelTurnResult)
-    best_answer_result: ModelTurnResult = field(default_factory=ModelTurnResult)
+    answer_result: ModelTurnResult = field(default_factory=ModelTurnResult)
     transient_tool_outputs: dict[str, str] = field(default_factory=dict)
-
-    @property
-    def answer_result(self) -> ModelTurnResult:
-        if self.best_answer_result.answer_text:
-            return self.best_answer_result
-        return self.last_result
-
-    def record_result(self, result: ModelTurnResult) -> None:
-        self.last_result = result
-        if result.has_completed_answer_candidate:
-            self.best_answer_result = result
 
 
 @dataclass(frozen=True)
@@ -147,16 +145,6 @@ class _PlannedToolCall:
     frozen_tool: Any | None
     counts_toward_budget: bool
     provider_call_index: int
-
-
-def _relevant_tool_groups(
-    configured_groups: set[str],
-    context: ContextSnapshot,
-) -> set[str]:
-    """Return configured groups without interpreting capability artifacts."""
-
-    del context
-    return set(configured_groups)
 
 
 LIVE_STREAM_HUB = LiveStreamHub()
@@ -169,7 +157,7 @@ def build_remote_model_adapter(settings: ProviderSettings) -> ModelAdapter:
         api_base=settings.api_base,
         model_name=settings.model_name,
     )
-    return OpenAIModelAdapter.from_config(config)
+    return build_provider_adapter(settings.provider, config)
 
 
 class RunLoop:
@@ -187,7 +175,7 @@ class RunLoop:
         capability_guidance: tuple[CapabilityGuidanceContribution, ...] | None = None,
         completion: CompletionGate,
         definition: AgentDefinition = DEFAULT_AGENT_DEFINITION,
-        use_declared_tool_inputs: bool = False,
+        strict_tool_inputs: bool = True,
         live_stream: LiveStreamHub = LIVE_STREAM_HUB,
         tool_executor: ToolExecutor | None = None,
         resource_resolver: CompositeResourceResolver | None = None,
@@ -213,7 +201,7 @@ class RunLoop:
         if not self.registry.frozen:
             self.registry.freeze()
         self.definition = definition
-        self.use_declared_tool_inputs = use_declared_tool_inputs
+        self.strict_tool_inputs = strict_tool_inputs
         self.live_stream = live_stream
         self.turn_recorder = RunTurnRecorder(
             session_factory=self.session_factory,
@@ -278,6 +266,8 @@ class RunLoop:
                 state.completed_turn_count + 1,
                 self.definition.limits.max_turns + 1,
             ):
+                # Starting another turn retires the previous answer candidate.
+                state.answer_result = ModelTurnResult()
                 state.control.checkpoint()
                 if self._should_enter_finalization(state, turn_count=turn_count):
                     self._activate_finalization(
@@ -329,10 +319,13 @@ class RunLoop:
                             return
                         continue
                     result = submitted
-                    state.record_result(result)
+                    state.answer_result = result
 
+                completion_context = self._completion_context(
+                    run_id, context=None if result.submitted_answer is not None else prepared.context,
+                )
                 decision = self.completion.evaluate(
-                    context=prepared.context,
+                    context=completion_context,
                     model_result=result,
                     turn_count=turn_count,
                     max_turns=self.definition.limits.max_turns,
@@ -347,30 +340,26 @@ class RunLoop:
                         state.answer_result,
                         state=state,
                         turn_count=turn_count,
-                        context=prepared.context,
+                        context=completion_context,
                     ):
                         return
                     if decision.kind is CompletionKind.REPAIR:
                         state.control.record_repair()
                     continue
                 if decision.kind is CompletionKind.FAIL:
+                    if self._complete_for_limit(
+                        lease, run_id, result,
+                        code=CompletionLimitationCode.TURN_BUDGET_REACHED,
+                    ):
+                        return
                     self._fail(lease, run_id, "AGENT_INCOMPLETE", decision.reason)
                     return
-                partial = decision.kind is CompletionKind.PARTIAL
                 if self._complete(
                     lease,
                     run_id,
                     result,
-                    disposition=(
-                        CompletionDisposition.BOUNDED_PARTIAL
-                        if partial
-                        else CompletionDisposition.COMPLETE
-                    ),
-                    limitation_codes=(
-                        [CompletionLimitationCode.TURN_BUDGET_REACHED]
-                        if partial
-                        else []
-                    ),
+                    disposition=CompletionDisposition.COMPLETE,
+                    limitation_codes=[],
                     evidence_artifact_ids=decision.evidence_artifact_ids,
                 ):
                     return
@@ -436,11 +425,14 @@ class RunLoop:
                 )
                 or 0
             )
-            best_answer_result = RunRepository(db).latest_completed_answer(run_id)
+            answer_result = RunRepository(db).latest_completed_answer(run_id)
             run_result = load_object(str(run.result_json or "{}"))
             focus = run_result.get("focus")
             finalizing = isinstance(focus, dict) and focus.get("kind") == "synthesize"
             provider_settings = ProviderSettings.from_run(run)
+            if provider_settings.provider not in SUPPORTED_PROVIDERS:
+                detail = fixed_error_detail("MODEL_PROVIDER_UNSUPPORTED")
+                raise RunControlError(detail["code"], detail["message"])
             control = LeaseAwareRunControl(
                 run=run,
                 limits=self.definition.limits,
@@ -455,7 +447,7 @@ class RunLoop:
             tool_count=tool_count,
             completed_turn_count=completed_turn_count,
             finalizing=finalizing,
-            best_answer_result=best_answer_result,
+            answer_result=answer_result,
         )
 
     def _execute_pending_invocations(
@@ -522,22 +514,37 @@ class RunLoop:
             state.control.checkpoint()
             raise RunCancellationRequested() from exc
         except TurnStreamError as exc:
+            failed_result = ModelTurnResult(usage=exc.usage, termination=TurnTermination.FAILED)
+            failed_charge = None
+            failed_budget_error = None
+            if exc.usage:
+                try:
+                    failed_charge = state.control.charge_usage(exc.usage, pricing=state.pricing)
+                except RunControlError as budget_exc:
+                    failed_budget_error = budget_exc
+                    failed_charge = self._fallback_usage_charge(failed_result, state.pricing)
             with self.session_factory() as db:
                 RunRepository(db).settle_turn(
                     lease=lease,
                     turn_id=prepared.turn_id,
-                    result=ModelTurnResult(),
+                    result=failed_result,
                     error_code=exc.code,
                     error_message=str(exc),
+                    input_tokens=failed_charge.input_tokens if failed_charge else 0,
+                    output_tokens=failed_charge.output_tokens if failed_charge else 0,
+                    total_tokens=failed_charge.total_tokens if failed_charge else 0,
+                    cost_usd=failed_charge.cost_usd if failed_charge else 0.0,
                 )
                 db.commit()
+            if failed_budget_error is not None:
+                raise failed_budget_error
             if exc.retryable is False:
                 raise RunControlError(exc.code, str(exc)) from exc
             state.control.record_provider_failure()
             state.control.wait_for_provider_retry(exc.retry_after_seconds)
             return None
 
-        state.record_result(result)
+        state.answer_result = result
         budget_error: RunControlError | None = None
         try:
             charge = state.control.charge_usage(result.usage, pricing=state.pricing)
@@ -748,7 +755,6 @@ class RunLoop:
                     run_id,
                     state.answer_result,
                     code=CompletionLimitationCode.TOOL_BUDGET_REACHED,
-                    context=prepared.context,
                 ):
                     self._fail(
                         lease,
@@ -822,7 +828,6 @@ class RunLoop:
                 run_id,
                 state.answer_result,
                 code=CompletionLimitationCode.TOOL_BUDGET_REACHED,
-                context=prepared.context,
             ):
                 self._fail(
                     lease,
@@ -878,6 +883,7 @@ class RunLoop:
             # so queued inputs belonging to later Runs cannot leak into this Turn.
             SessionRepository(db).consume_steering_inputs(lease=lease, run_id=run_id)
             run = RunRepository(db).get(run_id)
+            settings = ProviderSettings.from_run(run)
             context = ContextAssembler(
                 db,
                 contributors=self.context_contributors,
@@ -892,7 +898,6 @@ class RunLoop:
             groups = set(
                 state.get("allowed_tool_groups") or self.definition.allowed_tool_groups
             )
-            groups = _relevant_tool_groups(groups, context)
 
             available_resource_kinds: set[str] = set()
             if run.input_id:
@@ -909,11 +914,10 @@ class RunLoop:
                 execution_mode=self.definition.execution_mode,
                 available_resource_kinds=frozenset(available_resource_kinds),
             )
-            tool_schemas = OpenAIModelAdapter.prepare_tools(
+            tool_schemas = project_tool_schemas(
+                settings.provider,
                 model_name=str(run.model_name or ""),
-                tools=tools.provider_schemas(
-                    declared_inputs=self.registry if self.use_declared_tool_inputs else None,
-                ),
+                tools=tools.provider_schemas(strict=self.strict_tool_inputs),
             )
             artifact_types = frozenset(
                 artifact.type for artifact in context.selected_artifacts
@@ -925,12 +929,17 @@ class RunLoop:
                 tools=tools,
                 registry=self.registry,
             )
+            prompt_limit = self.definition.limits.max_prompt_tokens
+            model_limits = resolve_model_limits(settings.model_name)
+            if model_limits is not None:
+                prompt_limit = model_limits.prompt_limit(prompt_limit)
             prompt = self.prompts.assemble(
                 definition=self.definition,
                 context=context,
                 tool_schemas=tool_schemas,
                 tool_output_overrides=tool_output_overrides,
                 guidance=active_guidance,
+                max_prompt_tokens=prompt_limit,
             )
             turn = SessionRepository(db).start_turn(
                 lease=lease,
@@ -946,11 +955,10 @@ class RunLoop:
                 context_hash=context.hash,
                 tool_materialization=tools.model_dump(mode="json"),
                 tool_materialization_hash=tools.hash,
-                provider="openai-responses",
+                provider=settings.provider,
                 model_name=str(run.model_name or ""),
                 phase=(RunPhase.FINALIZING if finalizing else RunPhase.WAITING_MODEL),
             )
-            settings = ProviderSettings.from_run(run)
             db.commit()
             return _PreparedTurn(
                 turn_id=str(turn.id),
@@ -1051,18 +1059,6 @@ class RunLoop:
         with self.session_factory() as db:
             guard = ProgressGuard(db)
             fingerprint = guard.fingerprint(run_id)
-            snapshot = context or ContextAssembler(
-                db,
-                contributors=self.context_contributors,
-                resource_providers=self.resource_providers,
-                resource_discovery=self.resource_discovery,
-                artifact_representation_describer=self.artifact_representation_describer,
-            ).build(run_id)
-            decision = self.completion.evaluate_bounded_partial(
-                context=snapshot,
-                model_result=result,
-                reason="The run reached its no-progress limit with usable durable work.",
-            )
             repository = RunRepository(db)
             stalled_turns = repository.record_progress(
                 lease=lease,
@@ -1073,7 +1069,15 @@ class RunLoop:
             db.commit()
         if not reached_limit:
             return False
-        if decision.kind in {CompletionKind.PARTIAL, CompletionKind.REPAIR}:
+        snapshot = context if context is not None else self._completion_context(run_id)
+        decision = self.completion.evaluate_bounded_partial(
+            context=snapshot,
+            model_result=result,
+            reason="The run reached its no-progress limit with usable durable work.",
+        )
+        if decision.kind is CompletionKind.REPAIR or (
+            decision.kind is CompletionKind.PARTIAL and decision.use_answer_candidate
+        ):
             if not state.finalizing and turn_count < self.definition.limits.max_turns:
                 self._activate_finalization(
                     lease,
@@ -1092,17 +1096,23 @@ class RunLoop:
             return self._complete(
                 lease,
                 run_id,
-                result,
+                result if decision.use_answer_candidate else ModelTurnResult(),
                 disposition=CompletionDisposition.BOUNDED_PARTIAL,
                 limitation_codes=[CompletionLimitationCode.NO_PROGRESS],
                 evidence_artifact_ids=decision.evidence_artifact_ids,
             )
         else:
+            delivery_failed = bool(snapshot.citable_artifact_ids) and (
+                state.finalizing or "structured_evidence" in decision.missing
+            )
+            error = fixed_error_detail(
+                "AGENT_DELIVERY_INCOMPLETE" if delivery_failed else "AGENT_NO_PROGRESS"
+            )
             self._fail(
                 lease,
                 run_id,
-                "AGENT_NO_PROGRESS",
-                "连续多轮没有产生新的可验证结果，已停止重复尝试。",
+                error["code"],
+                error["message"],
             )
         return True
 
@@ -1113,31 +1123,37 @@ class RunLoop:
         result: ModelTurnResult,
         *,
         code: CompletionLimitationCode,
-        context: ContextSnapshot | None = None,
     ) -> bool:
-        with self.session_factory() as db:
-            snapshot = context or ContextAssembler(
-                db,
-                contributors=self.context_contributors,
-                resource_providers=self.resource_providers,
-                resource_discovery=self.resource_discovery,
-                artifact_representation_describer=self.artifact_representation_describer,
-            ).build(run_id)
-            decision = self.completion.evaluate_bounded_partial(
-                context=snapshot,
-                model_result=result,
-                reason=f"The run stopped at the {code.value} boundary with usable durable work.",
-            )
+        # An admitted tool may have settled just before the limit ended this Turn.
+        snapshot = self._completion_context(run_id)
+        decision = self.completion.evaluate_bounded_partial(
+            context=snapshot,
+            model_result=result,
+            reason=f"The run stopped at the {code.value} boundary with usable durable work.",
+        )
         if decision.kind is not CompletionKind.PARTIAL:
             return False
         return self._complete(
             lease,
             run_id,
-            result,
+            result if decision.use_answer_candidate else ModelTurnResult(),
             disposition=CompletionDisposition.BOUNDED_PARTIAL,
             limitation_codes=[code],
             evidence_artifact_ids=decision.evidence_artifact_ids,
         )
+
+    def _completion_context(
+        self, run_id: str, *, context: ContextSnapshot | None = None,
+    ) -> ContextSnapshot:
+        with self.session_factory() as db:
+            assembler = ContextAssembler(
+                db,
+                contributors=self.context_contributors,
+                resource_providers=self.resource_providers,
+                resource_discovery=self.resource_discovery,
+                artifact_representation_describer=self.artifact_representation_describer,
+            )
+            return assembler.for_completion(context if context is not None else assembler.build(run_id))
 
     def _fail(self, lease: SessionLease, run_id: str, code: str, message: str) -> None:
         self.terminalizer.fail(lease, run_id, code, message)

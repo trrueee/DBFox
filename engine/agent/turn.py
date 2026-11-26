@@ -166,11 +166,13 @@ class TurnStreamError(RuntimeError):
         code: str = "MODEL_PROVIDER_STREAM_FAILED",
         retryable: bool | None = False,
         retry_after_seconds: float | None = None,
+        usage: dict[str, int] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.retryable = retryable
         self.retry_after_seconds = retry_after_seconds
+        self.usage = dict(usage or {})
 
 
 class TurnStreamCancelled(TurnStreamError):
@@ -219,6 +221,7 @@ class TurnStreamAssembler:
                     code=item.error_code or "MODEL_PROVIDER_STREAM_FAILED",
                     retryable=item.error_retryable,
                     retry_after_seconds=item.retry_after_seconds,
+                    usage=usage,
                 )
             if item.kind in {
                 TurnStreamKind.ANSWER_START,
@@ -346,6 +349,7 @@ class TurnStreamAssembler:
                 "Model response was incomplete.",
                 code="MODEL_PROVIDER_INCOMPLETE",
                 retryable=False,
+                usage=usage,
             )
         if termination is TurnTermination.FAILED:
             raise TurnStreamError(

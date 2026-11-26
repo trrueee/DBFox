@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from engine.agent.tool import ToolInvocation
@@ -13,6 +14,16 @@ from engine.resource import ResourceScopeRef
 
 class ApprovalAuthorityError(RuntimeError):
     pass
+
+
+class ApprovalExpiredError(ApprovalAuthorityError):
+    """The approval grant was valid when decided but expired before execution."""
+
+
+def _utc(value: Any) -> datetime | None:
+    if not isinstance(value, datetime):
+        return None
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def _object(value: str | None) -> dict[str, Any]:
@@ -36,6 +47,11 @@ class ApprovalAuthorityVerifier:
     ) -> ExecutionAuthority:
         if approval is None or str(approval.status) != "approved":
             raise ApprovalAuthorityError("The invocation has no active approval grant")
+        expires_at = _utc(getattr(approval, "expires_at", None))
+        if expires_at is not None and expires_at <= datetime.now(UTC):
+            raise ApprovalExpiredError(
+                "The approval grant expired before execution"
+            )
         if str(approval.tool_invocation_id) != invocation.id:
             raise ApprovalAuthorityError("Approval is bound to another invocation")
         if str(approval.tool_name) != invocation.tool_name:
@@ -66,7 +82,6 @@ class ApprovalAuthorityVerifier:
             invocation_id=invocation.id,
             tool_name=invocation.tool_name,
             authorized_input_hash=invocation.authorized_input_hash,
-            policy_fingerprint=canonical_hash(decision.model_dump(mode="json")),
             approval_subject_fingerprint=(
                 str(current_contract.get("subject_fingerprint"))
                 if isinstance(current_contract, dict)

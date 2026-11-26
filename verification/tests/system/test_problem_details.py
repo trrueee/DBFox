@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import pytest
+
 from engine.main import LOCAL_SECURE_TOKEN, app
 
 
-def test_unauthorized_response_is_correlated_problem_details(client) -> None:
-    response = client.get("/api/v1/conversations", headers={"X-Local-Token": ""})
+@pytest.mark.parametrize("token", [b"", b"invalid", b"\xe9"], ids=["empty", "invalid", "non-ascii"])
+def test_unauthorized_response_is_correlated_problem_details(client, token: bytes) -> None:
+    response = client.get("/api/v1/conversations", headers=[(b"x-local-token", token)])
 
     assert response.status_code == 401
     assert response.headers["content-type"].startswith("application/problem+json")

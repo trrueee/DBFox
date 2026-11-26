@@ -60,8 +60,9 @@ Creative DLC 的波次、独立职责与未完成门禁见[开发计划](./creat
 1. [Runtime Item 协议](./agent-runtime-item-protocol.md)：Provider Items 到耐久 RunItem、事件和前端投影。
 2. [工具、当前上下文与记忆边界](./agent-tool-context-memory-contract.md)：通用 Context、Artifact/Evidence、工具结果和历史召回如何分工。
 3. [历史会话查找合同](./agent-conversation-recall-contract.md)：对话档案、FTS5、检索/读取工具和上下文预算。
-4. [错误边界合同](./error-boundary-contract.md)：Provider、Tool、HTTP/SSE、持久化和 UI 的错误可信度。
-5. [Agent 产品与运行规范](../specs/agent.md)：用户可见行为、领域词汇和验收场景。
+4. [上下文压缩决策](./context-compaction-decision.md)：确定性裁剪、证据账本与不引入 LLM 摘要的理由。
+5. [错误边界合同](./error-boundary-contract.md)：Provider、Tool、HTTP/SSE、持久化和 UI 的错误可信度。
+6. [Agent 产品与运行规范](../specs/agent.md)：用户可见行为、领域词汇和验收场景。
 
 ## 6. 当前核心不变量
 

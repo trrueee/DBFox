@@ -193,16 +193,19 @@ def test_data_sql_validate_uses_authorized_database_handle_and_emits_fenced_arti
     assert "schema_error" in rejected.output.blocked_reasons
 
 
+@pytest.mark.parametrize("row_count", [2, 27])
 def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
     tmp_path: Path,
+    row_count: int,
 ) -> None:
     database_path = tmp_path / "execute.sqlite3"
+    rows = [(index, 40 if index == 2 else 25) for index in range(1, row_count + 1)]
     connection = sqlite3.connect(database_path)
     try:
         connection.execute("CREATE TABLE orders (id INTEGER PRIMARY KEY, total INTEGER)")
         connection.executemany(
             "INSERT INTO orders (id, total) VALUES (?, ?)",
-            [(1, 25), (2, 40)],
+            [*rows, (row_count + 1, 7)],
         )
         connection.commit()
     finally:
@@ -229,7 +232,7 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
         validate_tool.input_model.model_validate(
             {
                 "database_id": database.id,
-                "sql": "SELECT id, total FROM orders ORDER BY id",
+                "sql": "SELECT id, total FROM orders WHERE total >= 25 ORDER BY id",
             }
         ),
         ToolRunContext.for_invocation(
@@ -299,10 +302,9 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
         ),
     )
     assert outcome.output.rows == [
-        {"id": "1", "total": "25"},
-        {"id": "2", "total": "40"},
+        {"id": str(row_id), "total": str(total)} for row_id, total in rows[:20]
     ]
-    assert outcome.output.returned_rows == 2
+    assert outcome.output.returned_rows == row_count
     assert outcome.artifacts[0].type == "dbfox.data.result_view"
     assert outcome.artifacts[0].schema_version == 2
     assert outcome.artifacts[0].payload_ref is None
@@ -326,6 +328,17 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
             )
         ],
     )
+
+    observation = execute_tool.project_observation(
+        status="success", output=outcome.output.model_dump(mode="json"), artifacts=[result_artifact],
+    )
+    assert observation.facts["row_count"] == row_count
+    assert observation.facts["returned_rows"] == len(observation.provider_payload["rows"]) == min(row_count, 20)
+    assert observation.facts["truncated"] is (row_count > 20)
+    assert observation.facts["source_sql_artifact_id"] == sql_artifact.id
+    assert observation.provider_payload["executed_sql"] == sql_artifact.payload["safeSql"]
+    assert "WHERE" in observation.provider_payload["executed_sql"]
+    assert "executed_sql" not in observation.facts
 
     dataframe = snapshot.get_artifact_representation(
         result_artifact.type,
@@ -366,7 +379,7 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
     assert page_result.consistency == "live_reexecution"
     assert page.fields[0].values == ["2"]
     assert page.fields[1].values == ["40"]
-    assert page.row_count == 2
+    assert page.row_count == row_count
     assert page.has_next_page is True
     assert "Re-executed" in page_result.notices[0]
     exported = dataframe.provider.execute(
@@ -421,7 +434,7 @@ def test_data_sql_execute_rechecks_artifacts_and_reads_sqlite_in_dlc(
         result_context("result_profile"),
     )
     assert profiled.profiles[0]["kind"] == "number"
-    assert profiled.profiles[0]["numeric"]["mean"] == 32.5
+    assert profiled.profiles[0]["numeric"]["mean"] == sum(total for _, total in rows[:20]) / min(row_count, 20)
 
 @pytest.mark.parametrize("operation", ["console.execute", "table.preview"])
 def test_data_workbench_read_uses_durable_action_run_and_owned_tool_chain(

@@ -574,16 +574,20 @@ def build_product_run_loop(
     from engine.agent.definition import DEFAULT_AGENT_DEFINITION
     from engine.agent.loop import ModelAdapter, ProviderSettings, RunLoop, build_remote_model_adapter
     from engine.llm.config import LlmConfigurationError
-    from engine.llm.local_model import LOCAL_MODEL_OUTPUT_TOKENS
 
     snap = snapshot or get_active_runtime_snapshot()
     definition = DEFAULT_AGENT_DEFINITION
     if local_model is not None and local_model.profile is not None:
         definition = definition.model_copy(update={
             "limits": definition.limits.model_copy(update={
-                "max_prompt_tokens": local_model.profile.context_length - LOCAL_MODEL_OUTPUT_TOKENS - 1024,
-                "model_request_timeout_seconds": 90,
-                "model_first_event_timeout_seconds": 60,
+                "max_prompt_tokens": local_model.profile.context_length - local_model.profile.output_token_limit - 1024,
+                # Native local tool parsers can buffer the complete argument
+                # body before exposing an SSE event. Shorter silence windows
+                # would repeatedly cancel a valid generation. The existing
+                # whole-Turn deadline and cancellation probe still bound it.
+                "model_request_timeout_seconds": 240,
+                "model_first_event_timeout_seconds": 240,
+                "model_stream_idle_timeout_seconds": 240,
                 "model_turn_timeout_seconds": 240,
             }),
         })
@@ -615,7 +619,7 @@ def build_product_run_loop(
         session_factory=session_factory,
         model_factory=model_factory,
         definition=definition,
-        use_declared_tool_inputs=local_model is not None and local_model.configured,
+        strict_tool_inputs=not (local_model is not None and local_model.configured),
         registry=build_product_tool_registry(snap, workbench_presentations=workbench_presentations),
         context_contributors=default_context_contributors(snap),
         capability_guidance=default_capability_guidance(snap),

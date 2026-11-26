@@ -21,7 +21,7 @@ beforeEach(() => {
   models.mockReset().mockResolvedValue({ ok: true, models: [{ id: "model-new" }] });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   useWorkspaceStore.setState({ activeProjectId: "p1", workbenchByConversation: {}, mainSurfaceByProject: {} });
-  saveStoredApiConfig({ credentialId: "vault-reference", apiBase: "https://example.test/v1", modelName: "model-old" });
+  saveStoredApiConfig({ credentialId: "vault-reference", apiBase: "https://example.test/v1", modelName: "model-old", provider: "openai-chat" });
 });
 afterEach(() => { cleanup(); client.clear(); localStorage.clear(); });
 function renderContext() { return render(<QueryClientProvider client={client}><ComposerContext /></QueryClientProvider>); }
@@ -35,7 +35,7 @@ describe("composer project and model context", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: "model-new" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "当前模型：model-new" })).toBeInTheDocument());
     expect(models).toHaveBeenCalledWith("vault-reference", "https://example.test/v1");
-    expect(getStoredApiConfig()).toEqual({ credentialId: "vault-reference", apiBase: "https://example.test/v1", modelName: "model-new" });
+    expect(getStoredApiConfig()).toEqual({ credentialId: "vault-reference", apiBase: "https://example.test/v1", modelName: "model-new", provider: "openai-chat" });
     expect(localStorage.getItem("dbfox-api-config")).not.toContain("apiKey");
   });
   it("switches projects through the existing shell and keeps each in-memory draft", async () => {

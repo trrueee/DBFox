@@ -35,7 +35,9 @@ from .sql.dialect_context import canonical_sql_dialect
 from .query_identity import query_fingerprint
 from .sql.safety_contracts import DatabaseSafetyScope, ExecutionPolicy
 from .sql.row_serializer import serialize_rows
+from .sql.schema_validation import CatalogSchemaValidator
 from .sql.trust_gate import TrustGate
+from .store import DataStateStore
 from .sql_admission import admit_sql_execution, resolve_validated_sql_execution
 from .tool_contracts import (
     QueryResultOutput,
@@ -43,6 +45,8 @@ from .tool_contracts import (
     SqlValidateInput,
     SqlValidateOutput,
 )
+
+_MAX_OBSERVED_SQL_CHARS = 2_048
 
 
 class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
@@ -67,8 +71,9 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
     semantics = ToolSemanticSpec(produces=("dbfox.data.validated_query",))
     presentation = ToolPresentation(title="验证分析 SQL", category="query")
 
-    def __init__(self, connection: DataConnectionBoundary) -> None:
+    def __init__(self, connection: DataConnectionBoundary, store: DataStateStore) -> None:
         self._connection = connection
+        self._store = store
 
     def run(
         self,
@@ -86,7 +91,15 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlValidateOutput]):
             project_id=handle.project_id,
         )
         gate = TrustGate(
-            schema_validator=lambda _query: [],
+            schema_validator=CatalogSchemaValidator(
+                dialect=dialect,
+                lookup=lambda names: self._store.catalog_has_tables(
+                    handle.id,
+                    names,
+                    expected_resource_version=handle.scope_version,
+                    case_sensitive=handle.dialect == "postgresql",
+                ),
+            ),
             dry_run_validator=lambda sql, _parameters: self._connection.explain(handle, sql),
         )
         policy: ExecutionPolicy = (
@@ -320,7 +333,7 @@ class SqlExecuteReadonlyTool(
             returned_rows=returned_rows,
             truncated=result.truncated or model_window.truncated,
             rows=model_window.rows,
-            safe_sql="",
+            safe_sql=validated.safe_sql if len(validated.safe_sql) <= _MAX_OBSERVED_SQL_CHARS else "",
             execution_time_ms=latency_ms,
             warnings=(
                 ["The database result exceeded the bounded transport window."]
@@ -351,17 +364,24 @@ class SqlExecuteReadonlyTool(
             ),
             None,
         )
+        rows = output.get("rows") or []
+        row_count = int(output.get("row_count") or 0)
+        returned_rows = len(rows)
         facts = {
             "artifact_id": str(getattr(result_artifact, "id", "") or "") or None,
+            "source_sql_artifact_id": result_artifact.payload.get("sourceSqlArtifactId") if result_artifact is not None else None,
             "evidence_kind": "query_result",
-            "row_count": int(output.get("row_count") or 0),
-            "returned_rows": int(output.get("returned_rows") or 0),
+            "row_count": row_count,
+            "returned_rows": returned_rows,
             "columns": [str(column) for column in output.get("columns") or []],
             "latency_ms": output.get("latency_ms"),
-            "truncated": bool(output.get("truncated")),
+            "truncated": bool(output.get("truncated")) or row_count > returned_rows,
         }
+        summary = f"查询取得 {row_count} 行。"
+        if row_count > returned_rows:
+            summary = f"查询取得 {row_count} 行，当前回传 {returned_rows} 行供分析。"
         return ToolObservationProjection(
-            summary=f"查询执行成功，返回 {facts['returned_rows']} 行。",
+            summary=summary,
             facts=facts,
-            provider_payload={**facts, "rows": list(output.get("rows") or [])},
+            provider_payload={**facts, "rows": rows, "executed_sql": output.get("safe_sql") or None},
         )

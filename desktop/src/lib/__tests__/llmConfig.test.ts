@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   API_CONFIG_STORAGE_KEY,
   DEFAULT_API_CONFIG,
+  buildConversationLlmPayload,
+  buildLlmTestValues,
   discardLlmConfigDraft,
   getStoredApiConfig,
   saveStoredApiConfig,
@@ -26,6 +28,7 @@ describe("llmConfig credential boundary", () => {
       credentialId: "cred_llm_api_key_123",
       apiBase: "https://example.test/v1",
       modelName: "qwen-plus",
+      provider: "openai-responses",
     });
   });
 
@@ -45,6 +48,7 @@ describe("llmConfig credential boundary", () => {
       credentialId: "cred_llm_api_key_saved",
       apiBase: "https://example.test/v1",
       modelName: "saved-model",
+      provider: "openai-chat",
     });
 
     const saved = getStoredApiConfig();
@@ -60,7 +64,21 @@ describe("llmConfig credential boundary", () => {
       credentialId: "cred_llm_api_key_saved",
       apiBase: "https://example.test/v1",
       modelName: "saved-model",
+      provider: "openai-chat",
     });
     expect(getStoredApiConfig()).toEqual(saved);
+  });
+
+  it("preserves an explicit protocol for a custom endpoint across probe and Run", () => {
+    saveStoredApiConfig({
+      credentialId: "cred_llm_api_key_saved",
+      apiBase: "https://example.test/v1",
+      modelName: "custom-model",
+      provider: "openai-chat",
+    });
+
+    const saved = getStoredApiConfig();
+    expect(buildLlmTestValues(saved).provider).toBe("openai-chat");
+    expect(buildConversationLlmPayload(saved).provider).toBe("openai-chat");
   });
 });

@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
+from concurrent.futures import CancelledError
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 import sqlite3
 import threading
 import time
 from typing import Any
 
+from pymysql.constants import ER
+from pymysql.err import MySQLError
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
 from sqlalchemy.pool import NullPool
@@ -35,6 +39,33 @@ from .sql.row_serializer import (
 CredentialGetter = Callable[[str, str], str | None]
 
 
+def apply_mysql_statement_timeout(cursor: Any, timeout_ms: int) -> None:
+    """Apply the server-side timeout supported by MySQL or MariaDB.
+
+    MySQL uses ``max_execution_time`` in milliseconds; MariaDB uses
+    ``max_statement_time`` in seconds. Only an unknown system variable permits
+    trying the other setting. The driver retains separate socket limits.
+    """
+    for statement, value in (
+        ("SET SESSION max_execution_time = %s", timeout_ms),
+        ("SET SESSION max_statement_time = %s", timeout_ms / 1000.0),
+    ):
+        try:
+            cursor.execute(statement, (value,))
+            return
+        except MySQLError as exc:
+            if not exc.args or exc.args[0] != ER.UNKNOWN_SYSTEM_VARIABLE:
+                raise
+
+
+@dataclass
+class _ActiveConnection:
+    provider: str
+    connection: Any
+    interrupt_lock: threading.Lock = field(default_factory=threading.Lock)
+    detached: bool = False
+
+
 class DataConnectionBoundary:
     """Open short-lived connections without exposing secrets to tool code.
 
@@ -46,7 +77,7 @@ class DataConnectionBoundary:
     def __init__(self, credential_getter: CredentialGetter) -> None:
         self._credential_getter = credential_getter
         self._active_lock = threading.RLock()
-        self._active: dict[str, tuple[str, Any] | None] = {}
+        self._active: dict[str, _ActiveConnection | None] = {}
         self._cancel_requested: set[str] = set()
 
     def cancel(self, invocation_id: str) -> None:
@@ -56,20 +87,26 @@ class DataConnectionBoundary:
         if not normalized:
             return
         with self._active_lock:
+            if normalized not in self._active:
+                return
             self._cancel_requested.add(normalized)
             active = self._active.get(normalized)
-        if active is None:
+        if active is None or active.provider == "mysql":
+            # PyMySQL connections are thread-affine. The owner closes after
+            # server execution or bounded socket I/O returns.
             return
-        provider, connection = active
-        try:
-            if provider in ("sqlite", "duckdb"):
-                connection.interrupt()
-            elif provider == "postgresql":
-                connection.cancel()
-            else:
-                connection.close()
-        except Exception:
-            return
+        with active.interrupt_lock:
+            if active.detached:
+                return
+            try:
+                if active.provider in ("sqlite", "duckdb"):
+                    active.connection.interrupt()
+                elif active.provider == "postgresql":
+                    active.connection.cancel()
+            except Exception:
+                # A driver may already be returning from the read. Its owner
+                # still sees the cancellation flag before publishing results.
+                return
 
     def _reserve(self, invocation_id: str) -> str:
         normalized = str(invocation_id).strip()
@@ -83,15 +120,22 @@ class DataConnectionBoundary:
 
     def _attach(self, invocation_id: str, provider: str, connection: Any) -> None:
         with self._active_lock:
-            self._active[invocation_id] = (provider, connection)
+            self._active[invocation_id] = _ActiveConnection(provider, connection)
             cancelled = invocation_id in self._cancel_requested
         if cancelled:
-            self.cancel(invocation_id)
+            self._detach(invocation_id)
             try:
                 connection.close()
             except Exception:
                 pass
-            raise RuntimeError("Database execution was cancelled.")
+            raise CancelledError("Database execution was cancelled.")
+
+    def _detach(self, invocation_id: str) -> None:
+        with self._active_lock:
+            active = self._active.get(invocation_id)
+        if active is not None:
+            with active.interrupt_lock:
+                active.detached = True
 
     def _is_cancelled(
         self,
@@ -175,8 +219,10 @@ class DataConnectionBoundary:
         """Execute one already-admitted query through a read-only transaction."""
 
         execution_id = self._reserve(invocation_id)
+        dialect = handle.dialect
         try:
-            dialect = handle.dialect
+            if self._is_cancelled(execution_id, cancellation_probe):
+                raise CancelledError("Database execution was cancelled.")
             parse_single_readonly_query(sql, dialect)
             executable_sql, bound_parameters = render_dbapi_sql(
                 sql,
@@ -203,6 +249,7 @@ class DataConnectionBoundary:
                     handle,
                     executable_sql,
                     execution_id,
+                    cancellation_probe,
                     bound_parameters,
                 )
             if dialect == "postgresql":
@@ -210,11 +257,26 @@ class DataConnectionBoundary:
                     handle,
                     executable_sql,
                     execution_id,
+                    cancellation_probe,
                     bound_parameters,
                 )
         except DuplicateResultColumnsError as exc:
             raise ToolInputError(str(exc)) from exc
+        except (CancelledError, TimeoutError):
+            raise
         except Exception as exc:
+            if self._is_cancelled(execution_id, cancellation_probe):
+                raise CancelledError("Database execution was cancelled.") from exc
+            if dialect == "mysql" and isinstance(exc, MySQLError) and (
+                (exc.args and exc.args[0] in {ER.QUERY_TIMEOUT, ER.STATEMENT_TIMEOUT})
+                or isinstance(exc.__cause__ or exc.__context__, TimeoutError)
+            ):
+                raise TimeoutError("The database query exceeded its time limit.") from exc
+            if dialect == "postgresql" and getattr(exc, "pgcode", None) == "57014" and (
+                getattr(getattr(exc, "diag", None), "message_primary", None)
+                == "canceling statement due to statement timeout"
+            ):
+                raise TimeoutError("The database query exceeded its time limit.") from exc
             raise RuntimeError("Read-only database execution failed.") from exc
         finally:
             self._release(execution_id)
@@ -225,21 +287,35 @@ class DataConnectionBoundary:
         connection = open_workbook_query(handle)
         connect_ms = int((time.perf_counter() - started) * 1000)
         self._attach(invocation_id, "duckdb", connection)
-        timer = threading.Timer(QUERY_TIMEOUT_MS / 1000, lambda: self.cancel(invocation_id))
+        timed_out = threading.Event()
+
+        def interrupt_on_timeout() -> None:
+            timed_out.set()
+            connection.interrupt()
+
+        timer = threading.Timer(QUERY_TIMEOUT_MS / 1000, interrupt_on_timeout)
         try:
             if self._is_cancelled(invocation_id, cancellation_probe):
-                raise RuntimeError("Workbook query was cancelled")
+                raise CancelledError("Workbook query was cancelled.")
             timer.start()
             execute_started = time.perf_counter()
             connection.execute(sql, dict(parameters))
             execute_ms = int((time.perf_counter() - execute_started) * 1000)
             fetched = _fetch_and_serialize(connection, row_mapper=self._row_mapper(connection))
             if self._is_cancelled(invocation_id, cancellation_probe):
-                raise RuntimeError("Workbook query was cancelled")
+                raise CancelledError("Workbook query was cancelled.")
+            if timed_out.is_set():
+                raise TimeoutError("The workbook query exceeded its time limit.")
             return QueryExecutionResult.from_fetch_result(fetched, connect_ms=connect_ms, execute_ms=execute_ms)
+        except Exception as exc:
+            if timed_out.is_set() and not isinstance(exc, (CancelledError, TimeoutError)):
+                raise TimeoutError("The workbook query exceeded its time limit.") from exc
+            raise
         finally:
             timer.cancel()
-            timer.join() if timer.ident is not None else None
+            if timer.ident is not None:
+                timer.join()
+            self._detach(invocation_id)
             connection.close()
 
     @contextmanager
@@ -315,7 +391,10 @@ class DataConnectionBoundary:
                 raise RuntimeError("This database provider does not support catalog reflection.")
             engine = create_engine(driver, creator=creator, poolclass=NullPool)
             with engine.connect() as connection:
-                yield connection
+                try:
+                    yield connection
+                finally:
+                    self._detach(execution_id)
         finally:
             if engine is not None:
                 engine.dispose()
@@ -349,12 +428,20 @@ class DataConnectionBoundary:
             cursor = connection.execute(sql, parameters)
             execute_ms = int((time.perf_counter() - execute_started) * 1_000)
             fetched = _fetch_and_serialize(cursor, row_mapper=self._row_mapper(cursor))
+            if self._is_cancelled(invocation_id, cancellation_probe):
+                raise CancelledError("Database execution was cancelled.")
             return QueryExecutionResult.from_fetch_result(
                 fetched,
                 connect_ms=connect_ms,
                 execute_ms=execute_ms,
             )
+        except sqlite3.OperationalError as exc:
+            if getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_INTERRUPT and time.monotonic() >= deadline:
+                if not self._is_cancelled(invocation_id, cancellation_probe):
+                    raise TimeoutError("The database query exceeded its time limit.") from exc
+            raise
         finally:
+            self._detach(invocation_id)
             connection.close()
 
     @staticmethod
@@ -370,6 +457,7 @@ class DataConnectionBoundary:
         handle: DatabaseHandle,
         sql: str,
         invocation_id: str,
+        cancellation_probe: Callable[[], bool] | None,
         parameters: Mapping[str, Any],
     ) -> QueryExecutionResult:
         host, port, username = self._require_network_fields(handle)
@@ -389,7 +477,12 @@ class DataConnectionBoundary:
         self._attach(invocation_id, "mysql", connection)
         try:
             with connection.cursor() as cursor:
+                if self._is_cancelled(invocation_id, cancellation_probe):
+                    raise CancelledError("Database execution was cancelled.")
+                apply_mysql_statement_timeout(cursor, QUERY_TIMEOUT_MS)
                 cursor.execute("START TRANSACTION READ ONLY")
+                if self._is_cancelled(invocation_id, cancellation_probe):
+                    raise CancelledError("Database execution was cancelled.")
                 execute_started = time.perf_counter()
                 cursor.execute(sql, parameters)
                 execute_ms = int((time.perf_counter() - execute_started) * 1_000)
@@ -397,12 +490,15 @@ class DataConnectionBoundary:
                     cursor,
                     row_mapper=self._row_mapper(cursor),
                 )
+                if self._is_cancelled(invocation_id, cancellation_probe):
+                    raise CancelledError("Database execution was cancelled.")
                 return QueryExecutionResult.from_fetch_result(
                     fetched,
                     connect_ms=connect_ms,
                     execute_ms=execute_ms,
                 )
         finally:
+            self._detach(invocation_id)
             try:
                 connection.rollback()
             except Exception:
@@ -417,6 +513,7 @@ class DataConnectionBoundary:
         handle: DatabaseHandle,
         sql: str,
         invocation_id: str,
+        cancellation_probe: Callable[[], bool] | None,
         parameters: Mapping[str, Any],
     ) -> QueryExecutionResult:
         host, port, username = self._require_network_fields(handle)
@@ -436,7 +533,11 @@ class DataConnectionBoundary:
         try:
             connection.set_session(readonly=True, autocommit=False)
             with connection.cursor() as cursor:
+                if self._is_cancelled(invocation_id, cancellation_probe):
+                    raise CancelledError("Database execution was cancelled.")
                 cursor.execute("SET LOCAL statement_timeout = %s", (QUERY_TIMEOUT_MS,))
+                if self._is_cancelled(invocation_id, cancellation_probe):
+                    raise CancelledError("Database execution was cancelled.")
                 execute_started = time.perf_counter()
                 cursor.execute(sql, parameters)
                 execute_ms = int((time.perf_counter() - execute_started) * 1_000)
@@ -444,12 +545,15 @@ class DataConnectionBoundary:
                     cursor,
                     row_mapper=self._row_mapper(cursor),
                 )
+                if self._is_cancelled(invocation_id, cancellation_probe):
+                    raise CancelledError("Database execution was cancelled.")
                 return QueryExecutionResult.from_fetch_result(
                     fetched,
                     connect_ms=connect_ms,
                     execute_ms=execute_ms,
                 )
         finally:
+            self._detach(invocation_id)
             try:
                 connection.rollback()
             except Exception:

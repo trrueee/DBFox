@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from engine.agent.context import ContextSnapshot
+from engine.agent.context import ContextObservation, ContextSnapshot
 from typing import Literal, Protocol
 
 from engine.agent.artifact_embed import (
@@ -36,6 +36,7 @@ class CompletionDecision(BaseModel):
     reason: str
     missing: list[str] = Field(default_factory=list)
     evidence_artifact_ids: list[str] = Field(default_factory=list)
+    use_answer_candidate: bool = True
 
 
 class CompletionConstraintResult(BaseModel):
@@ -107,7 +108,7 @@ class SemanticCitationConstraint:
             artifact_id
             for observation in observations
             for artifact_id in observation.artifact_ids
-        }
+        }.intersection(context.citable_artifact_ids)
         cited = {
             artifact_id
             for artifact_id, _, _ in citation_references(model_result.answer_text)
@@ -157,10 +158,11 @@ class SemanticArtifactCompletionSupport:
         return sorted(cited & artifacts)
 
     def supports_bounded_partial(self, *, context: ContextSnapshot) -> bool:
+        citable = set(context.citable_artifact_ids)
         return any(
             observation.status == "succeeded"
             and self.semantic_capability in observation.capabilities
-            and bool(observation.artifact_ids)
+            and citable.intersection(observation.artifact_ids)
             for observation in context.observations
         )
 
@@ -190,8 +192,6 @@ class CompletionPolicy:
                 reason="The model requested tools that must be settled before completion.",
             )
 
-        successes = [item for item in context.observations if item.status == "succeeded"]
-        failures = [item for item in context.observations if item.status == "failed"]
         result_artifact_ids = {
             artifact_id
             for support in self.supports
@@ -206,10 +206,17 @@ class CompletionPolicy:
 
         turn_budget_reached = turn_count >= max_turns
 
-        if failures and not model_result.display_text and not turn_budget_reached:
+        if _has_unrecovered_action(context.observations):
             return CompletionDecision(
-                kind=CompletionKind.REPAIR,
-                reason="The latest failed tool call needs a model-visible repair turn.",
+                kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.REPAIR,
+                reason=(
+                    "The latest capability action failed or was rejected and has not been recovered. "
+                    "An explanation, plan update or answer submission does not complete that action. "
+                    "Use the tool feedback to correct the request through authorized capabilities. "
+                    "Respect denied approvals and do not repeat unconfirmed side effects. "
+                    "If blocked, report the limitation without claiming completion."
+                ),
+                missing=["tool_recovery"],
             )
 
         if not model_result.display_text:
@@ -276,27 +283,19 @@ class CompletionPolicy:
                 missing=["valid_artifact_embeds"],
             )
 
-        observed_artifact_ids = {
-            artifact_id
-            for observation in successes
-            for artifact_id in observation.artifact_ids
-        }
-        # Bounded prompt history is not the Artifact authorization boundary.
-        # This index is resolved from successful durable observations and the
-        # existing Resource fence, including sources older than the prompt slice.
-        observed_artifact_ids.update(context.citable_artifact_ids)
-        if cited_artifact_ids - observed_artifact_ids:
+        citable_artifact_ids = set(context.citable_artifact_ids)
+        if cited_artifact_ids - citable_artifact_ids:
             return CompletionDecision(
                 kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
-                reason="The answer cites an Artifact that is not present in the durable observations.",
+                reason="The answer cites an unavailable source. Use only accessible public Artifacts from successful observations in this Run.",
                 missing=["valid_inline_evidence"],
             )
-        if set(embedded_artifact_ids) - observed_artifact_ids:
+        if set(embedded_artifact_ids) - citable_artifact_ids:
             return CompletionDecision(
                 kind=CompletionKind.FAIL if turn_budget_reached else CompletionKind.CONTINUE,
                 reason=(
-                    "The answer embeds an Artifact that is not present in the durable "
-                    "observations."
+                    "The answer embeds an unavailable source. Use only accessible "
+                    "public Artifacts from successful observations in this Run."
                 ),
                 missing=["valid_artifact_embeds"],
             )
@@ -332,24 +331,12 @@ class CompletionPolicy:
                 missing=["settled_plan"],
             )
 
-        if turn_budget_reached:
-            decision = CompletionDecision(
-                kind=CompletionKind.PARTIAL,
-                reason="The run reached its turn budget with an answer candidate.",
-                evidence_artifact_ids=sorted(
-                    cited_artifact_ids & result_artifact_ids
-                ),
-            )
-        else:
-            decision = CompletionDecision(
-                kind=CompletionKind.SYNTHESIZE,
-                reason="The answer candidate is supported by the available durable observations.",
-                evidence_artifact_ids=sorted(
-                    cited_artifact_ids & result_artifact_ids
-                ),
-            )
         return self._apply_constraints(
-            decision,
+            CompletionDecision(
+                kind=CompletionKind.SYNTHESIZE,
+                reason="The candidate meets the current answer delivery requirements.",
+                evidence_artifact_ids=sorted(cited_artifact_ids & result_artifact_ids),
+            ),
             context=context,
             model_result=model_result,
             turn_count=turn_count,
@@ -421,22 +408,23 @@ class CompletionPolicy:
         """Decide whether a forced stop has durable, safe work to return.
 
         A completed answer candidate still passes the normal evidence and
-        citation policy. Supported durable work permits repair of an invalid
-        candidate, not publication of it. Without an answer, a capability
+        citation policy. Accessible public sources permit delivery repair of an
+        invalid candidate, not publication of it. Without an answer, a capability
         support can opt into the bounded-partial response composed by
         Terminalizer. Core never infers domain evidence from an Artifact payload.
         """
 
-        if model_result.has_completed_answer_candidate:
+        unresolved_action = _has_unrecovered_action(context.observations)
+        if not unresolved_action and model_result.has_completed_answer_candidate:
             decision = self.evaluate(
                 context=context,
                 model_result=model_result,
                 turn_count=1,
                 max_turns=1,
             )
-            if decision.kind is CompletionKind.PARTIAL:
-                return decision.model_copy(update={"reason": reason})
-            if any(
+            if decision.kind is CompletionKind.SYNTHESIZE:
+                return decision.model_copy(update={"kind": CompletionKind.PARTIAL, "reason": reason})
+            if context.citable_artifact_ids or any(
                 support.supports_bounded_partial(context=context)
                 for support in self.supports
             ):
@@ -448,9 +436,23 @@ class CompletionPolicy:
             has_observed_public_artifacts=context.has_observed_public_artifacts,
         ):
             return CompletionDecision(
-                kind=CompletionKind.REPAIR if context.citable_artifact_ids else CompletionKind.FAIL,
-                reason="The admitted answer requirements still need a structured evidence delivery; a generated partial summary cannot satisfy them.",
+                kind=(CompletionKind.REPAIR if context.citable_artifact_ids and not unresolved_action
+                      else CompletionKind.FAIL),
+                reason="The admitted answer requirements still need a structured evidence delivery. A generated partial summary cannot satisfy them.",
                 missing=["structured_evidence"],
+            )
+        if unresolved_action:
+            if any(
+                item.status == "succeeded" and item.function_kind != "control"
+                and item.contributes_progress
+                and set(item.artifact_ids).intersection(context.citable_artifact_ids)
+                for item in context.observations
+            ):
+                return CompletionDecision(kind=CompletionKind.PARTIAL, reason=reason, use_answer_candidate=False)
+            return CompletionDecision(
+                kind=CompletionKind.FAIL,
+                reason="A capability action is unresolved and there is no usable verified result.",
+                missing=["tool_recovery"],
             )
         if any(
             support.supports_bounded_partial(context=context)
@@ -466,6 +468,37 @@ class CompletionPolicy:
             reason="The forced stop has no completed answer or supported durable work.",
             missing=["usable_partial_result"],
         )
+
+
+def _has_unrecovered_action(observations: list[ContextObservation]) -> bool:
+    """Keep operational failures separate from a corrected discovery miss."""
+    failures: list[tuple[ContextObservation, tuple[tuple[str, str], ...]]] = []
+    recoveries: dict[tuple[str, tuple[tuple[str, str], ...]], int] = {}
+    recoveries_by_tool: dict[str, int] = {}
+    unknown_tool_failure = -1
+    for item in observations:
+        if item.function_kind == "control":
+            continue
+        if item.status == "unknown":
+            # A later call cannot prove what happened to an uncertain attempt.
+            return True
+        scope = tuple(sorted((ref.kind, ref.id) for ref in item.resource_refs))
+        if item.status in {"failed", "rejected", "cancelled"}:
+            if item.error_code == "UNKNOWN_TOOL":
+                unknown_tool_failure = max(unknown_tool_failure, item.sequence)
+            else:
+                failures.append((item, scope))
+        if item.status == "succeeded" and (item.contributes_progress or item.artifact_ids):
+            key = (item.tool_name, scope)
+            recoveries[key] = max(recoveries.get(key, -1), item.sequence)
+            recoveries_by_tool[item.tool_name] = max(recoveries_by_tool.get(item.tool_name, -1), item.sequence)
+    return (
+        unknown_tool_failure >= 0 and unknown_tool_failure >= max(recoveries_by_tool.values(), default=-1)
+    ) or any(
+        item.sequence >= (recoveries.get((item.tool_name, scope), -1) if scope
+                          else recoveries_by_tool.get(item.tool_name, -1))
+        for item, scope in failures
+    )
 
 
 class CompletionGate:

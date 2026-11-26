@@ -1114,6 +1114,23 @@
   white-space: nowrap;
 }
 
+.conv-answer-draft {
+  color: var(--text-muted);
+}
+
+.conv-answer-draft > summary {
+  width: fit-content;
+  padding-block: var(--space-2);
+  cursor: pointer;
+  font-size: var(--ui-font-caption);
+}
+
+.conv-answer-draft > summary:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .conv-run-outcome__details {
   width: 100%;
   color: var(--text-muted);

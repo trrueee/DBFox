@@ -12,6 +12,7 @@ from sqlglot import exp
 from .bound_parameters import parameter_fingerprint
 from .dry_run_contracts import DryRunResult
 from .guardrail import GuardrailResult, guardrail_check_with_ast
+from .schema_validation import aggregates_across_join_sources
 from .safety_contracts import (
     DatabaseSafetyScope,
     ExecutionPolicy,
@@ -101,6 +102,16 @@ class TrustGate:
                 "Production database agent execution requires manual confirmation."
                 if scope.environment == "prod"
                 else "Execution requires manual confirmation."
+            )
+        if (
+            guardrail_result != "reject"
+            and isinstance(parsed_ast, exp.Expression)
+            and aggregates_across_join_sources(parsed_ast)
+        ):
+            messages.append(
+                "JOIN aggregation grain: measures from different sources can be repeated by the join. "
+                "For totals at each source's original grain, aggregate each input independently "
+                "or verify uniqueness on the join keys before using the results."
             )
 
         return {

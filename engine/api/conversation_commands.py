@@ -37,7 +37,7 @@ from engine.errors import DBFoxError
 from engine.json_codec import loads as json_loads
 from engine.llm.config import LlmConfigurationError, normalize_product_llm_preferences
 from engine.llm.local_model import ManagedLocalModel
-from engine.models import AgentRun, AgentRunItemRecord, AgentSession, Project, ConversationAttachment, SessionResourceRetirement
+from engine.models import AgentApproval, AgentQuestionRequest, AgentRun, AgentRunItemRecord, AgentSession, Project, ConversationAttachment, SessionResourceRetirement
 from engine.runtime_composition import authorize_project_resources
 from engine.runtime_composition import authorize_conversation_resources
 from engine.runtime_composition import deliver_session_resource_retirements
@@ -271,6 +271,8 @@ def admit_conversation_input(
             credential_id = payload.llm_credential_id
             api_base = preferences.api_base
             model_name = preferences.model_name
+            if payload.provider is not None:
+                llm_payload["provider"] = payload.provider
         admission = SessionRepository(db).admit(
             session_id=conversation_id,
             resource_refs=tuple(resource_refs),
@@ -348,13 +350,20 @@ def select_conversation_artifact(
     return {"session_id": conversation_id, "artifact_id": payload.artifact_id}
 
 
-@router.post("/approvals/{approval_id}/resolve", response_model=Approval)
+@router.post(
+    "/conversations/{conversation_id}/approvals/{approval_id}/resolve",
+    response_model=Approval,
+)
 def resolve_approval(
+    conversation_id: str,
     approval_id: str,
     payload: ApprovalResolutionRequest,
     request: Request,
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
+    row = db.get(AgentApproval, approval_id)
+    if row is None or str(row.session_id) != conversation_id:
+        raise HTTPException(status_code=404, detail={"code": "APPROVAL_NOT_FOUND"})
     active_coordinator = coordinator(request)
     try:
         value = ApprovalRepository(db).resolve(
@@ -375,13 +384,20 @@ def resolve_approval(
     return value.model_dump(mode="json")
 
 
-@router.post("/questions/{question_id}/resolve", response_model=QuestionRequest)
+@router.post(
+    "/conversations/{conversation_id}/questions/{question_id}/resolve",
+    response_model=QuestionRequest,
+)
 def resolve_question(
+    conversation_id: str,
     question_id: str,
     payload: QuestionResolutionRequest,
     request: Request,
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
+    row = db.get(AgentQuestionRequest, question_id)
+    if row is None or str(row.session_id) != conversation_id:
+        raise HTTPException(status_code=404, detail={"code": "QUESTION_NOT_FOUND"})
     active_coordinator = coordinator(request)
     try:
         value = QuestionRepository(db).resolve(
@@ -405,15 +421,22 @@ def resolve_question(
     return value.model_dump(mode="json")
 
 
-@router.post("/runs/{run_id}/cancel", response_model=RunCancelledResponse)
+@router.post(
+    "/conversations/{conversation_id}/runs/{run_id}/cancel",
+    response_model=RunCancelledResponse,
+)
 def cancel_run(
+    conversation_id: str,
     run_id: str,
     request: Request,
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
     active_coordinator = coordinator(request)
     try:
-        run = RunRepository(db).request_cancel(run_id=run_id)
+        run = RunRepository(db).request_cancel(
+            run_id=run_id,
+            conversation_id=conversation_id,
+        )
     except NoResultFound:
         db.rollback()
         raise HTTPException(status_code=404, detail={"code": "RUN_NOT_FOUND"}) from None

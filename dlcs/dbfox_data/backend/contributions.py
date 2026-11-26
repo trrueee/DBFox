@@ -130,7 +130,7 @@ def register(host: BackendExtensionHost) -> None:
     )
     result_representation = DataResultRepresentation(store, connection)
     workbench = DataCatalogWorkbench(store, connection)
-    host.tools.register(SqlValidateTool(connection))
+    host.tools.register(SqlValidateTool(connection, store))
     host.tools.register(SqlExecuteReadonlyTool(connection))
     host.tools.register(CatalogOverviewTool(store, connection))
     host.tools.register(CatalogRefreshTool(store, connection))
@@ -175,12 +175,12 @@ def register(host: BackendExtensionHost) -> None:
         id="analytical_work",
         version="1",
         instructions=(
-            "For analytical calculations, establish the relevant grain, time basis, filters, denominator, "
-            "and comparison baseline when they can change the answer.\n"
-            "Treat samples as samples rather than proof of a population-level claim. For rates, shares, "
-            "averages, and growth, make the denominator, missing-value treatment, and baseline explicit.\n"
-            "Verify schema semantics before decision-critical computation, and distinguish observed "
-            "association from causation."
+            "State what each cited query measured. A count over filtered input counts only matching "
+            "rows. Use the scope of the executed SQL for every value from that result. "
+            "Describe preview rows as samples. "
+            "Report only figures that answer the request and identify their filters, grain, "
+            "time basis, denominator, or baseline when relevant. Distinguish observed associations "
+            "from causal explanations."
         ),
         applies_to_resource_kinds=(DATABASE_RESOURCE_KIND,),
         applies_to_artifact_types=(

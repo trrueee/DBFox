@@ -2,7 +2,7 @@ import { createParser, type EventSourceMessage } from "eventsource-parser";
 import { ApiError, fetchEnginePath } from "../../lib/api/client";
 import {
   admitConversationInputApiV1ConversationsConversationIdInputsPost,
-  cancelRunApiV1RunsRunIdCancelPost,
+  cancelRunApiV1ConversationsConversationIdRunsRunIdCancelPost,
   createConversationApiV1ConversationsPost,
   deleteConversationApiV1ConversationsConversationIdDelete,
   getConversationApiV1ConversationsConversationIdGet,
@@ -12,8 +12,8 @@ import {
   getRunEvidenceApiV1ConversationsConversationIdRunsRunIdEvidenceGet,
   listConversationsApiV1ConversationsGet,
   patchConversationApiV1ConversationsConversationIdPatch,
-  resolveApprovalApiV1ApprovalsApprovalIdResolvePost,
-  resolveQuestionApiV1QuestionsQuestionIdResolvePost,
+  resolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePost,
+  resolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePost,
   selectConversationArtifactApiV1ConversationsConversationIdArtifactSelectionPost,
 } from "../../lib/api/generated/sdk.gen";
 import type {
@@ -229,12 +229,13 @@ export const selectConversationArtifact = async (
 };
 
 export const resolveConversationApproval = (
+  conversationId: string,
   approvalId: string,
   expectedVersion: number,
   approved: boolean,
   note?: string,
-) => resolveApprovalApiV1ApprovalsApprovalIdResolvePost({
-  path: { approval_id: approvalId },
+) => resolveApprovalApiV1ConversationsConversationIdApprovalsApprovalIdResolvePost({
+  path: { conversation_id: conversationId, approval_id: approvalId },
   body: {
     expected_version: expectedVersion,
     decision: approved ? "approve" : "reject",
@@ -244,18 +245,19 @@ export const resolveConversationApproval = (
 }).then(({ data }) => data);
 
 export const resolveConversationQuestion = (
+  conversationId: string,
   questionId: string,
   expectedVersion: number,
   response: { selected_value?: string; text?: string },
-) => resolveQuestionApiV1QuestionsQuestionIdResolvePost({
-  path: { question_id: questionId },
+) => resolveQuestionApiV1ConversationsConversationIdQuestionsQuestionIdResolvePost({
+  path: { conversation_id: conversationId, question_id: questionId },
   body: { expected_version: expectedVersion, ...response },
   throwOnError: true,
 }).then(({ data }) => data);
 
-export const cancelConversationRun = (runId: string) =>
-  cancelRunApiV1RunsRunIdCancelPost({
-    path: { run_id: runId },
+export const cancelConversationRun = (conversationId: string, runId: string) =>
+  cancelRunApiV1ConversationsConversationIdRunsRunIdCancelPost({
+    path: { conversation_id: conversationId, run_id: runId },
     throwOnError: true,
   }).then(({ data }) => data);
 

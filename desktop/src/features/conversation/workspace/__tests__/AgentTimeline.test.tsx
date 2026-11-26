@@ -142,6 +142,19 @@ describe("AgentTimeline", () => {
     expect(screen.queryByText("因任务失败终止")).toBeNull();
   });
 
+  it("keeps an unaccepted success claim as a collapsed draft while showing the real failure and saved work", () => {
+    const draft = assistant("文件已创建，所有功能已验证通过。", "final_answer", 3);
+    draft.payload.completion_disposition = null;
+    const { container } = renderTimeline([call(1), output(2), draft], {
+      status: "failed", error: { code: "AGENT_NO_PROGRESS", message: "连续多轮没有产生新的可验证结果。" },
+    }, [resultArtifact("result-1")]);
+    const details = screen.getByText("未交付的回答草稿").closest("details")!;
+    expect(details.open).toBe(false);
+    expect(details.textContent).toContain("文件已创建，所有功能已验证通过。");
+    expect(screen.getByRole("alert").textContent).toContain("任务未完成，已有结果仍可使用");
+    expect(container.querySelector('[role="group"][aria-label="本次成果"]')).toBeTruthy();
+  });
+
   it("exposes completed query results when a later step fails", () => {
     const onSelectArtifact = vi.fn();
     renderTimeline(

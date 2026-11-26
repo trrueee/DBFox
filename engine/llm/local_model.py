@@ -23,7 +23,9 @@ from engine.local_execution.command import local_environment
 if TYPE_CHECKING:
     from engine.local_execution.windows import WindowsProcess
 
-LOCAL_MODEL_OUTPUT_TOKENS = 2_048
+# A single native file-write call must fit its code as well as the call envelope.
+# This ceiling is reserved from the same context budget in runtime_composition.
+LOCAL_MODEL_OUTPUT_TOKENS = 8_192
 _LOOPBACK = "127.0.0.1"
 
 
@@ -40,6 +42,10 @@ class LocalModelProfile(BaseModel):
     state_dir: Path
     scratch_dir: Path
     context_length: int = Field(ge=8_192, le=32_768)
+
+    @property
+    def output_token_limit(self) -> int:
+        return min(LOCAL_MODEL_OUTPUT_TOKENS, self.context_length // 4)
 
 
 class ManagedLocalModel:
@@ -106,7 +112,7 @@ class ManagedLocalModel:
             ),
             model_name=profile.model_name,
             owns_client=True,
-            max_output_tokens=LOCAL_MODEL_OUTPUT_TOKENS,
+            max_output_tokens=profile.output_token_limit,
             extra_body={"think": False},
         )
 

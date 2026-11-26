@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import CancelledError
 from datetime import UTC, datetime
 import time
 from typing import Any
@@ -150,6 +151,8 @@ class DataPreviewTool(BaseTool[DataPreviewInput, DataPreviewOutput]):
                 cancellation_probe=context.is_cancelled,
                 parameters=parameters,
             )
+        except (CancelledError, TimeoutError):
+            raise
         except Exception as exc:
             raise ToolInputError("Database preview execution failed.") from exc
 

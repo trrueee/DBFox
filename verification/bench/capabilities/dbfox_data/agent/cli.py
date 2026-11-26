@@ -31,6 +31,7 @@ from verification.bench.capabilities.dbfox_data.agent.schema import (
     public_manifest_summary,
 )
 from verification.bench.capabilities.dbfox_data.agent.scoring import score_trial
+from verification.bench.framework.reporting import all_trials_passed
 
 
 ROOT = Path(__file__).resolve().parents[5]
@@ -150,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
             records=records,
             environment=environment_evidence(model=None, api_base=None),
         )
-        return 0 if summary["passed_trials"] == summary["scored_trials"] else 1
+        return 0 if all_trials_passed(summary) else 1
 
     cases = manifest.select(
         tags=frozenset(args.tag),
@@ -190,8 +191,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"REPORT={args.output / 'report.md'}")
     return (
         0
-        if summary["scored_trials"] > 0
-        and summary["passed_trials"] == summary["scored_trials"]
+        if summary["trials"] == len(cases) * args.repetitions
+        and all_trials_passed(summary)
         and summary["safety_veto_count"] == 0
         else 1
     )

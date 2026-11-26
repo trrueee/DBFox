@@ -38,6 +38,7 @@ class MaterializedTool(BaseModel):
     group: str
     description: str
     input_schema: dict[str, Any]
+    declared_input_schema: dict[str, Any] | None = None
     output_schema: dict[str, Any]
     policy: dict[str, Any]
     execution: dict[str, Any]
@@ -46,13 +47,16 @@ class MaterializedTool(BaseModel):
     recovery_policy: ToolRecoveryPolicy
     kind: str
 
-    def provider_schema(self) -> dict[str, Any]:
+    def provider_schema(self, *, strict: bool = True) -> dict[str, Any]:
+        parameters = self.input_schema
+        if not strict and self.declared_input_schema is not None:
+            parameters = self.declared_input_schema
         return {
             "type": "function",
             "name": self.name,
             "description": self.description,
-            "parameters": self.input_schema,
-            "strict": True,
+            "parameters": parameters,
+            "strict": strict,
         }
 
 
@@ -62,18 +66,9 @@ class ToolMaterialization(BaseModel):
     tools: tuple[MaterializedTool, ...] = ()
     hash: str
 
-    def provider_schemas(self, *, declared_inputs: ToolRegistry | None = None) -> list[dict[str, Any]]:
-        """Render provider inputs without changing the durable execution contract."""
-        if declared_inputs is None:
-            return [tool.provider_schema() for tool in self.tools]
-        return [
-            {
-                **tool.provider_schema(),
-                "parameters": declared_inputs.require(tool.name).spec.input_schema,
-                "strict": False,
-            }
-            for tool in self.tools
-        ]
+    def provider_schemas(self, *, strict: bool = True) -> list[dict[str, Any]]:
+        """Project only schemas captured when the Turn materialized its tools."""
+        return [tool.provider_schema(strict=strict) for tool in self.tools]
 
     def require(self, name: str) -> MaterializedTool:
         for tool in self.tools:
@@ -138,6 +133,10 @@ def require_current_tool(
     if (
         contract_hash != frozen.contract_hash
         or current_contract.contract_hash != frozen.contract_hash
+        or (
+            frozen.declared_input_schema is not None
+            and current_contract.declared_input_schema != frozen.declared_input_schema
+        )
     ):
         raise ToolVersionMismatch(
             f"Tool {name} contract {contract_hash!r} cannot run against "
@@ -249,6 +248,7 @@ def _materialize_tool(
         group=spec.group,
         description=spec.description,
         input_schema=input_schema,
+        declared_input_schema=spec.input_schema,
         output_schema=output_schema,
         policy=policy,
         execution=execution,

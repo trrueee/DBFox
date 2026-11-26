@@ -843,11 +843,14 @@ def run_real_provider(
                 updates["secret_scan_clean"] = trace.secret_scan_clean and not any(
                     term in trace.answer for term in forbidden
                 )
-                if case.result is not None and generated_payload:
-                    generated = json.loads(generated_payload)
+                if case.result is not None:
                     try:
-                        updates["generated_result"] = _query_table(datasource_path, generated["sql"], generated.get("parameters"))
                         updates["golden_result"] = _query_table(datasource_path, case.result.golden_sql)
+                        if generated_payload:
+                            generated = json.loads(generated_payload)
+                            updates["generated_result"] = _query_table(
+                                datasource_path, generated["sql"], generated.get("parameters"),
+                            )
                     except sqlite3.Error as exc:
                         updates["infrastructure_error"] = "RESULT_ORACLE_ERROR:" + type(exc).__name__
                 trace = trace.model_copy(update=updates)

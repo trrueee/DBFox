@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from engine.agent.control import LeaseAwareRunControl
 from engine.agent.artifact import (
     Artifact,
-    ArtifactVisibility,
     ArtifactPayloadContractResolver,
     ArtifactRelationType,
 )
@@ -23,6 +22,7 @@ from engine.agent.definition import AgentDefinition
 from engine.agent.execution_authority import (
     ApprovalAuthorityError,
     ApprovalAuthorityVerifier,
+    ApprovalExpiredError,
 )
 from engine.agent.observation import (
     Observation,
@@ -66,6 +66,7 @@ from engine.tools.materialization import (
     require_current_tool,
     require_reconciliation_tool,
 )
+from engine.tools.builtin.control import SubmitAnswerCommand
 from engine.tools.runtime import ToolExecutor, ToolRegistry
 from engine.tools.runtime.attempt import (
     CompositeResourceResolver,
@@ -87,7 +88,6 @@ from engine.tools.runtime.base import (
 )
 from engine.tools.runtime.executor import ToolExecutionControl
 from engine.tools.runtime.result import ToolResult
-from engine.tools.builtin.control import SubmitAnswerCommand
 
 
 ArtifactRepresentationProviderResolver = Callable[
@@ -202,39 +202,6 @@ class ToolDispatcher:
             resolver=CompositeResourceResolver(),
         )
         self.approval_authority = ApprovalAuthorityVerifier()
-
-    def request_and_execute(
-        self,
-        *,
-        lease: SessionLease,
-        run_id: str,
-        turn_id: str,
-        call: ModelToolCall,
-        materialization: ToolMaterialization,
-        control: LeaseAwareRunControl,
-    ) -> ToolDispatchResult:
-        dispatch = self.request(
-            lease=lease,
-            run_id=run_id,
-            turn_id=turn_id,
-            call=call,
-            materialization=materialization,
-            control=control,
-        )
-        if dispatch.outcome is not ToolDispatchOutcome.REQUESTED or dispatch.invocation is None:
-            return ToolDispatchResult(
-                outcome=dispatch.outcome,
-                provider_output=dispatch.provider_output,
-            )
-        provider_output = self.execute_requested(
-            lease,
-            dispatch.invocation,
-            control=control,
-        )
-        return ToolDispatchResult(
-            ToolDispatchOutcome.SETTLED,
-            provider_output=provider_output,
-        )
 
     def request(
         self,
@@ -417,20 +384,15 @@ class ToolDispatcher:
                     command_input = registered_function.input_model.model_validate(
                         invocation.authorized_input
                     )
-                    if isinstance(registered_function, SubmitAnswerCommand):
-                        # Resolve untrusted source IDs at the existing authorization
-                        # boundary. Completion still requires successful observations.
-                        artifacts = ArtifactRepository(db, resource_discovery=self.resource_discovery)
-                        for artifact_id in command_input.cited_artifact_ids:
-                            artifact = artifacts.available_artifact(
-                                session_id=lease.session_id, current_run_id=run_id,
-                                artifact_id=artifact_id,
+                    if isinstance(registered_function, SubmitAnswerCommand) and command_input.cited_artifact_ids:
+                        sources, _ = ArtifactRepository(
+                            db, resource_discovery=self.resource_discovery,
+                        ).observed_public_sources(run_id)
+                        if set(command_input.cited_artifact_ids).difference(artifact.id for artifact in sources):
+                            raise ToolInputError(
+                                "An answer source is unavailable. Use only public Artifact IDs "
+                                "from successful observations in this Run."
                             )
-                            if artifact is None or artifact.visibility is ArtifactVisibility.INTERNAL:
-                                raise ToolInputError(
-                                    "An answer source is unavailable. Use only public Artifact IDs "
-                                    "from successful observations in this Run."
-                                )
                     command_result = registered_function.handle(
                         command_input,
                         ControlCommandContext(
@@ -1037,6 +999,32 @@ class ToolDispatcher:
                         else None
                     ),
                 )
+            except ApprovalExpiredError as exc:
+                ToolInvocationRepository(db).settle(
+                    lease=lease,
+                    invocation_id=invocation.id,
+                    status=(
+                        ObservationStatus.UNKNOWN
+                        if interrupted_outcome_unresolved
+                        else ObservationStatus.REJECTED
+                    ),
+                    model_visible_summary=(
+                        "The interrupted action cannot be retried because its "
+                        "approval grant expired."
+                        if interrupted_outcome_unresolved
+                        else (
+                            "The approval grant expired before execution. "
+                            "Request approval again with the current action."
+                        )
+                    ),
+                    error_code=(
+                        "TOOL_OUTCOME_UNKNOWN"
+                        if interrupted_outcome_unresolved
+                        else "TOOL_APPROVAL_EXPIRED"
+                    ),
+                    error_message=str(exc),
+                )
+                return False, None
             except ApprovalAuthorityError as exc:
                 ToolInvocationRepository(db).settle(
                     lease=lease,

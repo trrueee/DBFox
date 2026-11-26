@@ -131,7 +131,7 @@ def test_unknown_provider_tool_is_durably_rejected_without_failing_the_run(
         arguments={"untrusted": "not persisted"},
     )
     try:
-        first = dispatcher.request_and_execute(
+        first = dispatcher.request(
             lease=lease,
             run_id=admission.run_id,
             turn_id=str(turn.id),
@@ -139,7 +139,7 @@ def test_unknown_provider_tool_is_durably_rejected_without_failing_the_run(
             materialization=tools,
             control=control,
         )
-        repeated = dispatcher.request_and_execute(
+        repeated = dispatcher.request(
             lease=lease,
             run_id=admission.run_id,
             turn_id=str(turn.id),

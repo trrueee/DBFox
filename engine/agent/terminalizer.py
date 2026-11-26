@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.agent.artifact import ArtifactSelectionSuggestion, ArtifactVisibility
@@ -44,8 +43,7 @@ from engine.agent.plan import PlanStatus
 from engine.agent.session import SessionLease
 from engine.agent.turn import ModelTurnResult
 from engine.app.safe_errors import fixed_error_detail
-from engine.json_codec import load_array, load_object
-from engine.models import AgentTaskPlanRecord
+from engine.json_codec import load_object
 
 
 class Terminalizer:
@@ -74,24 +72,18 @@ class Terminalizer:
             partial = disposition is CompletionDisposition.BOUNDED_PARTIAL
             artifact_repository = ArtifactRepository(db, resource_discovery=self.resource_discovery)
             artifacts = artifact_repository.list_for_run(run_id)
-            referenced_artifacts = (
-                artifact_repository.referenced_artifacts_for_run(run_id)
-            )
+            sources, _ = artifact_repository.observed_public_sources(run_id)
+            result_by_id = {item.id: item for item in sources}
+            referenced_artifacts = [item for item in sources if item.run_id != run_id]
             current_primary_artifacts = [
-                item for item in artifacts if item.visibility is ArtifactVisibility.PRIMARY
-            ]
-            answer_artifacts = [
-                item
-                for item in [*artifacts, *referenced_artifacts]
-                if item.visibility is not ArtifactVisibility.INTERNAL
+                item for item in artifacts
+                if item.visibility is ArtifactVisibility.PRIMARY and item.id in result_by_id
             ]
             final_text = (
                 result.answer_text if result.has_completed_answer_candidate else ""
             )
             text = final_text or (
                 _bounded_partial_summary(
-                    db,
-                    run_id=run_id,
                     result_artifact_count=len(current_primary_artifacts),
                     limitation_codes=limitation_codes,
                 )
@@ -110,7 +102,6 @@ class Terminalizer:
                 raise ValueError(
                     "Terminal answer contains invalid DBFox Artifact embed markup"
                 )
-            result_by_id = {item.id: item for item in answer_artifacts}
             embedded_artifact_ids = artifact_embed_ids(text)
             if any(artifact_id not in result_by_id for artifact_id in embedded_artifact_ids):
                 raise ValueError(
@@ -132,12 +123,8 @@ class Terminalizer:
                 raise ValueError(
                     "Evidence Artifact IDs must be cited inline by the terminal answer"
                 )
-            for artifact_id, _, _ in references:
-                available = artifact_repository.available_artifact(
-                    session_id=lease.session_id, current_run_id=run_id, artifact_id=artifact_id,
-                )
-                if artifact_id not in result_by_id or available is None:
-                    raise ValueError("Terminal answer cites an unavailable Artifact ID")
+            if cited_ids - result_by_id.keys():
+                raise ValueError("Terminal answer cites an unavailable Artifact ID")
             submitted_claims = (
                 result.submitted_answer.citation_claims if result.submitted_answer is not None else None
             )
@@ -262,10 +249,7 @@ class Terminalizer:
         if requirements_payload is not None:
             requirements = AnswerRequirements.model_validate(requirements_payload)
             source_repository = ArtifactRepository(db, resource_discovery=resource_discovery)
-            source_ids = [
-                artifact.id for artifact in source_repository.observed_artifacts_for_run(response.run_id)
-                if artifact.visibility is not ArtifactVisibility.INTERNAL
-            ]
+            sources, observed_public = source_repository.observed_public_sources(response.run_id)
             submitted = runs.submitted_answer_for_turn(response.run_id, terminal_turn_id) if terminal_turn_id else None
             if not requirements.is_satisfied(
                 submitted_artifact_ids=(
@@ -273,8 +257,8 @@ class Terminalizer:
                         evidence.artifact_id for evidence in response.answer.evidence
                     ) if submitted is not None and submitted.submitted_answer is not None else None
                 ),
-                citable_artifact_ids=source_ids,
-                has_observed_public_artifacts=source_repository.has_observed_public_artifacts(response.run_id),
+                citable_artifact_ids={artifact.id for artifact in sources},
+                has_observed_public_artifacts=observed_public,
             ):
                 return False
             if submitted is not None and submitted.answer_text != response.answer.text:
@@ -401,50 +385,18 @@ def _claim_text_for_citation(text: str, start: int, end: int) -> str:
 
 
 def _bounded_partial_summary(
-    db: Session,
     *,
-    run_id: str,
     result_artifact_count: int,
     limitation_codes: list[CompletionLimitationCode],
 ) -> str:
     """Project durable Run state into a useful, provider-neutral partial answer."""
-    plan = db.execute(
-        select(AgentTaskPlanRecord).where(AgentTaskPlanRecord.run_id == run_id)
-    ).scalar_one_or_none()
-    lines = ["分析以部分结果结束。"]
-    if plan is not None:
-        objective = str(plan.objective or "").strip()[:1_000]
-        steps = load_array(str(plan.steps_json or "[]"))[:12]
-        completed = [
-            str(step.get("title") or "").strip()[:240]
-            for step in steps
-            if isinstance(step, dict)
-            and step.get("status") == "completed"
-            and str(step.get("title") or "").strip()
-        ]
-        remaining = [
-            str(step.get("title") or "").strip()[:240]
-            for step in steps
-            if isinstance(step, dict)
-            and step.get("status") != "completed"
-            and str(step.get("title") or "").strip()
-        ]
-        if objective:
-            lines.append(f"目标：{objective}")
-        if completed:
-            lines.append("已完成：" + "；".join(completed))
-        if remaining:
-            lines.append("尚未完成：" + "；".join(remaining))
+    lines = ["任务以部分结果结束。"]
     if result_artifact_count:
         lines.append(
             f"本次已生成 {result_artifact_count} 项成果，可在工作区查看并继续处理。"
         )
     if limitation_codes:
-        lines.append(
-            "停止原因："
-            + "；".join(_limitation_caveat(code) for code in limitation_codes)
-        )
-    lines.append("你可以直接继续提问；后续运行可以复用已有结果，无需从头开始。")
+        lines.extend(_limitation_caveat(code) for code in limitation_codes)
     return "\n\n".join(lines)
 
 

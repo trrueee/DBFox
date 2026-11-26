@@ -28,3 +28,5 @@ def test_core_authority_bench_rejects_an_unfrozen_resource(db_session) -> None:
     assert outcome.metrics["authority.selection_accuracy"] == 1.0
     assert outcome.metrics["authority.violation_count"] == 0.0
     assert outcome.evidence["access_log"] == ()
+    assert outcome.evidence["run_status"] == "failed"
+    assert outcome.evidence["invocation_status"] == "rejected"

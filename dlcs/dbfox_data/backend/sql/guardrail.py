@@ -125,9 +125,11 @@ def count_statement_delimiters(sql: str) -> int:
     return semicolons
 
 
-# Pattern that matches MySQL executable comment openings: /*! followed by digits.
-# Used to block these outright — they can hide dangerous SQL from the AST walker.
-_MYSQL_EXEC_COMMENT_START = re.compile(r"/\*!\d")
+# Pattern that matches MySQL executable comment openings, both versioned
+# (``/*!50001 ... */``) and unversioned (``/*! ... */``).  MySQL executes both;
+# blocking only the versioned form leaves an equivalent bypass.  They can hide
+# dangerous SQL from the AST walker, so reject them outright.
+_MYSQL_EXEC_COMMENT_START = re.compile(r"/\*!")
 
 
 def _projection_has_star(projection: exp.Expression) -> bool:
@@ -213,7 +215,7 @@ def _preflight_rejection(sql_str: str) -> GuardrailResult | None:
                 "rule": "mysql_executable_comment",
                 "level": "reject",
                 "message": (
-                    "禁止使用 MySQL 版本化可执行注释 (/*!...*/)。"
+                    "禁止使用 MySQL 可执行注释 (/*!...*/)。"
                     "此类注释可以隐藏高危 SQL 指令，存在绕过安全审计的风险。"
                 ),
             }],

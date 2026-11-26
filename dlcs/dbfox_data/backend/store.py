@@ -780,6 +780,72 @@ class DataStateStore:
             ]
         return table, columns
 
+    def catalog_has_tables(
+        self,
+        database_id: str,
+        names: frozenset[str],
+        *,
+        expected_resource_version: str | None = None,
+        case_sensitive: bool = False,
+    ) -> set[str] | None:
+        """Return which requested table names exist in a ready catalog.
+
+        ``None`` means the catalog is not currently usable (not refreshed or a
+        different resource generation), so callers must skip schema warnings
+        instead of treating every table as unknown.
+        """
+
+        if not names:
+            return set()
+        workbook = self.get_workbook(database_id)
+        if workbook is not None:
+            workbook_table_names = {"data", "main.data"}
+            return {name for name in names if name.casefold() in workbook_table_names}
+        lookup_names = names if case_sensitive else frozenset(name.lower() for name in names)
+        placeholders = ",".join("?" for _ in lookup_names)
+        table_expression = "table_name" if case_sensitive else "lower(table_name)"
+        qualified_expression = "schema_name || '.' || table_name"
+        if not case_sensitive:
+            qualified_expression = f"lower({qualified_expression})"
+        with self._connect() as connection:
+            database = connection.execute(
+                """
+                SELECT d.catalog_source_version,
+                       (p.connection_generation || ':' || d.resource_generation) AS source_version
+                  FROM database_resources d
+                  JOIN connection_profiles p ON p.id = d.connection_profile_id
+                 WHERE d.id = ?
+                """,
+                (database_id,),
+            ).fetchone()
+            if database is None:
+                return None
+            if (
+                expected_resource_version is not None
+                and database["source_version"] != expected_resource_version
+            ):
+                return None
+            if database["catalog_source_version"] != database["source_version"]:
+                return None
+            rows = connection.execute(
+                f"""
+                SELECT schema_name, table_name
+                  FROM catalog_tables
+                 WHERE database_resource_id = ?
+                   AND ({table_expression} IN ({placeholders})
+                        OR {qualified_expression} IN ({placeholders}))
+                """,
+                (database_id, *lookup_names, *lookup_names),
+            ).fetchall()
+        available: set[str] = set()
+        for row in rows:
+            table_name = str(row["table_name"])
+            available.update((table_name, f"{row['schema_name']}.{table_name}"))
+        if case_sensitive:
+            return set(names & available)
+        lower_available = {name.lower() for name in available}
+        return {name for name in names if name.lower() in lower_available}
+
     def search_catalog(
         self,
         database_id: str,

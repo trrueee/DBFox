@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from dbfox_dlc_api import CompletionConstraintResult
+from dbfox_dlc_api import CompletionConstraintResult, ResourceScopeRef
+
+from .resource_kind import STORY_WORLD_KIND
+
+
+def _world_ref(refs: tuple[ResourceScopeRef, ...]) -> ResourceScopeRef | None:
+    return next((ref for ref in refs if ref.kind == STORY_WORLD_KIND), None)
 
 
 class StoryChapterConsistencyConstraint:
@@ -22,12 +28,16 @@ class StoryChapterConsistencyConstraint:
                 kind="pass",
                 reason="No chapter write requires a story consistency check.",
             )
-        checks = [
-            item
-            for item in observations
-            if item.status == "succeeded"
-            and "dbfox.story.graph_check" in item.capabilities
-        ]
+        checks: dict[tuple[ResourceScopeRef, int], list[int]] = {}
+        for observation in observations:
+            if observation.status != "succeeded" or "dbfox.story.graph_check" not in observation.capabilities:
+                continue
+            world = _world_ref(observation.resource_refs)
+            generation = observation.facts.get("world_generation")
+            if world is not None and type(generation) is int and generation > 0:
+                checks.setdefault((world, generation), []).append(observation.sequence)
+
+        latest_writes: dict[str, tuple[int, int, int]] = {}
         for write in writes:
             chapter = write.facts.get("chapter")
             generation = (
@@ -35,37 +45,28 @@ class StoryChapterConsistencyConstraint:
                 if isinstance(chapter, dict)
                 else None
             )
-            if not any(
-                check.sequence < write.sequence
-                and check.facts.get("world_generation") == generation
-                for check in checks
-            ):
-                return CompletionConstraintResult(
-                    kind="missing",
-                    reason="Each chapter write must use a preceding confirmed-facts snapshot.",
-                    requirements=["story_graph_query_before_chapter_write"],
-                )
-        last_chapter = writes[-1].facts.get("chapter")
-        last_generation = (
-            last_chapter.get("checked_world_generation")
-            if isinstance(last_chapter, dict)
-            else None
-        )
-        if not any(
-            check.sequence > writes[-1].sequence
-            and check.facts.get("world_generation") == last_generation
-            for check in checks
-        ):
+            world = _world_ref(write.resource_refs)
+            if world is not None and type(generation) is int:
+                sequences = checks.get((world, generation))
+                if sequences and sequences[0] < write.sequence:
+                    latest_writes[world.id] = (write.sequence, sequences[-1], generation)
+                    continue
             return CompletionConstraintResult(
                 kind="missing",
-                reason=(
-                    "Call story_graph_query now for the written chapter's world and verify "
-                    f"world_generation {last_generation} before the final answer. A chapter read "
-                    "or revisions list is not this check. Do not rewrite the saved chapter; "
-                    "repeating the answer cannot satisfy the missing observation."
-                ),
-                requirements=["story_graph_query_after_chapter_write"],
+                reason="Each chapter write needs a preceding facts check for its exact world resource and generation.",
+                requirements=["story_graph_query_before_chapter_write"],
             )
+        for world_id, (write_sequence, check_sequence, generation) in latest_writes.items():
+            if check_sequence <= write_sequence:
+                return CompletionConstraintResult(
+                    kind="missing",
+                    reason=(
+                        f"Call story_graph_query for world_id {world_id} after its last chapter write "
+                        f"and verify world_generation {generation} before delivering the answer. "
+                        "Leave the saved chapter intact."
+                    ),
+                    requirements=["story_graph_query_after_chapter_write"],
+                )
         return CompletionConstraintResult(
             kind="pass",
             reason="Chapter writes are bracketed by confirmed-facts checks.",

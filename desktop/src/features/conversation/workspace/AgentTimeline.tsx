@@ -145,6 +145,7 @@ export function AgentTimeline({
             <AssistantMessage
               key={item.id}
               item={item as AssistantMessageItem}
+              unaccepted={run.status === "failed" && item.payload.phase !== "commentary"}
               artifacts={artifacts}
               onSelectArtifact={onSelectArtifact}
               onOpenEvidence={onOpenEvidence}
@@ -330,11 +331,13 @@ function InputReceipt({ delivery }: { delivery: UserMessageItem["payload"]["deli
 
 function AssistantMessage({
   item,
+  unaccepted = false,
   artifacts,
   onSelectArtifact,
   onOpenEvidence,
 }: {
   item: AssistantMessageItem;
+  unaccepted?: boolean;
   artifacts: ConversationArtifact[];
   onSelectArtifact?: (artifactId: string) => void;
   onOpenEvidence?: (evidence: ConversationEvidence) => void;
@@ -364,7 +367,7 @@ function AssistantMessage({
       />
     );
   };
-  return (
+  const message = (
     <Message
       from="assistant"
       className="conv-agent-message"
@@ -388,6 +391,12 @@ function AssistantMessage({
       </MessageContent>
     </Message>
   );
+  return unaccepted ? (
+    <details className="conv-answer-draft">
+      <summary>未交付的回答草稿</summary>
+      {message}
+    </details>
+  ) : message;
 }
 
 function activeItem(items: ConversationRunItem[]): ConversationRunItem | undefined {

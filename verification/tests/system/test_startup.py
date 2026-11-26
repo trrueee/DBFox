@@ -219,10 +219,10 @@ def test_health_rejects_the_previous_runtime_token(monkeypatch) -> None:
 
 
 def test_protected_routes_compare_local_token_in_constant_time(monkeypatch) -> None:
-    calls: list[tuple[str, str]] = []
+    matches: list[bool] = []
 
-    def fake_compare_digest(left: str, right: str) -> bool:
-        calls.append((left, right))
+    def fake_compare_digest(left: bytes, right: bytes) -> bool:
+        matches.append(left == b"token-from-request" and right == LOCAL_SECURE_TOKEN.encode("utf-8"))
         return True
 
     monkeypatch.setattr(main_module.secrets, "compare_digest", fake_compare_digest)
@@ -233,7 +233,7 @@ def test_protected_routes_compare_local_token_in_constant_time(monkeypatch) -> N
             headers={"X-Local-Token": "token-from-request"},
         )
 
-    assert calls == [("token-from-request", LOCAL_SECURE_TOKEN)]
+    assert matches == [True]
     assert response.status_code != 401
 
 

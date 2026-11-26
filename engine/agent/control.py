@@ -75,6 +75,7 @@ class RunControl:
         self.consumed_tokens = int(run.consumed_tokens or 0)
         self.consumed_cost_usd = float(run.consumed_cost_usd or 0.0)
         self.provider_retry_count = int(run.provider_retry_count or 0)
+        self.recovery_count = int(run.recovery_count or 0)
         self.repair_attempt_count = int(run.repair_attempt_count or 0)
         self._cancellation_probe = cancellation_probe
         self._lease_lost_probe = lease_lost_probe
@@ -89,6 +90,11 @@ class RunControl:
     def checkpoint(self) -> None:
         if self.is_lease_lost():
             raise RunLeaseLost()
+        if self.recovery_count > self.limits.max_recovery_attempts:
+            raise RunControlError(
+                "AGENT_RECOVERY_EXHAUSTED",
+                "分析在多次进程中断后已达到恢复上限。",
+            )
         if time.monotonic() >= self.deadline:
             raise RunControlError("AGENT_DEADLINE_EXCEEDED", "分析已达到本次运行时限。")
         if self.is_cancel_requested():

@@ -9,8 +9,6 @@ import pymysql
 import pytest
 from sqlalchemy.orm import sessionmaker
 
-from engine.agent.events import LiveStreamHub
-from engine.agent.loop import RunLoop
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.resource_refs import RequestedResourceRef
 from verification.tests.integration.stream_fixtures import final_turn, tool_turn
@@ -25,12 +23,10 @@ from engine.models import (
 )
 from engine.runtime_composition import (
     authorize_project_resources,
-    build_default_completion_policy,
-    build_product_tool_registry,
-    default_context_contributors,
+    build_product_run_loop,
     initialize_runtime_snapshot,
 )
-from engine.agent.completion import CompletionGate
+from engine.tools.runtime.registry import ToolKey, ToolRegistry
 from engine.security import credential_vault
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 from scripts.prepare_dev_system_dlcs import prepare_dev_system_dlcs
@@ -86,10 +82,11 @@ def _seed_mysql(settings: dict[str, object]) -> None:
 
 
 class _MySQLContractProvider:
-    def __init__(self, turn: int, *, database: str, database_id: str) -> None:
+    def __init__(self, turn: int, *, database: str, database_id: str, registry: ToolRegistry) -> None:
         self.turn = turn
         self.database = database
         self.database_id = database_id
+        self.registry = registry
 
     def stream(self, *, messages, tools, timeout_seconds=None, stream_timeouts=None, cancellation_probe=None):
         del tools, timeout_seconds, cancellation_probe
@@ -97,7 +94,7 @@ class _MySQLContractProvider:
         if self.turn == 1:
             yield from tool_turn(
                 "inspect-orders",
-                "schema_inspect",
+                self.registry.provider_name_for_key(ToolKey("dbfox.data", "schema_inspect")),
                 {"database_id": self.database_id, "targets": [qualified_table]},
             )
             return
@@ -106,7 +103,7 @@ class _MySQLContractProvider:
             assert "inspect-orders" in serialized
             yield from tool_turn(
                 "preview-orders",
-                "data_preview",
+                self.registry.provider_name_for_key(ToolKey("dbfox.data", "data_preview")),
                 {
                     "database_id": self.database_id,
                     "table": qualified_table,
@@ -223,17 +220,12 @@ def test_mysql_harness_uses_production_tool_and_connection_contract(
             turn["value"],
             database=str(settings["database"]),
             database_id=database_id,
+            registry=loop.registry,
         )
 
     factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
-    loop = RunLoop(
-        session_factory=factory,
-        model_factory=model_factory,
-        registry=build_product_tool_registry(snapshot),
-        context_contributors=default_context_contributors(snapshot),
-        completion=CompletionGate(build_default_completion_policy(snapshot)),
-        live_stream=LiveStreamHub(),
-    )
+    loop = build_product_run_loop(session_factory=factory, snapshot=snapshot)
+    monkeypatch.setattr(loop, "model_factory", model_factory)
     try:
         loop.execute(lease=lease, run_id=admission.run_id)
     finally:
@@ -255,7 +247,7 @@ def test_mysql_harness_uses_production_tool_and_connection_contract(
     )
     result_artifact = (
         db_session.query(AgentArtifactRecord)
-        .filter_by(run_id=admission.run_id, type="dbfox.data.result_view")
+        .filter_by(run_id=admission.run_id, type="dbfox.data.snapshot")
         .one()
     )
     sql_payload = load_object(str(sql_artifact.payload_json))
@@ -264,11 +256,12 @@ def test_mysql_harness_uses_production_tool_and_connection_contract(
     assert run is not None and run.status == "completed"
     assert answer is not None and answer.content.startswith("MySQL 订单结构检查")
     assert [item.tool_name for item in invocations] == [
-        "schema_inspect",
-        "data_preview",
+        loop.registry.provider_name_for_key(ToolKey("dbfox.data", name))
+        for name in ("schema_inspect", "data_preview")
     ]
     assert all(item.status == "succeeded" for item in invocations)
     assert turn["value"] == 3
     assert "completed" not in str(sql_payload["safeSql"])
     assert sql_payload["parameters"] == {"dbfox_p0": "completed"}
-    assert result_payload["returnedRows"] == 2
+    assert result_payload["rowCount"] == 2
+    assert result_payload["sourceSqlArtifactId"] == sql_artifact.id

@@ -64,6 +64,10 @@ Artifact contract/representation 与 snapshot identity 全部由 Composition Roo
 `ToolSettlement` 独占 ToolResult → Artifact → Observation 的原子结算。两者不建立第二套
 Run/Event 协议。
 
+`ToolSettlement` 在同一个 metadata 事务中写入 Artifact、Invocation 终态、Observation 和事件。
+读取制品来源时核对生产 Invocation 已成功结算。外部系统的动作与本地数据库属于不同的事务边界，
+其中断结果继续由原有 reconciliation 合同处理。
+
 ## 3. 聚合与状态所有权
 
 | 聚合/实体 | 职责 |
@@ -141,10 +145,19 @@ Provider 的 finish signal 不是最终完成权。Runtime 继续检查：
 - 工具是否全部结算；
 - 是否存在可交付的回答正文；
 - 当前 Run 若产生了 verified result，数据事实是否引用了真实 Result Artifact；
-- 引用是否全部来自当前 Run 已观察到的 Artifact；
+- 引用和内嵌成果是否来自当前 Run 成功观察且仍可访问的公开 Artifact；
 - 预算是否耗尽以及能否交付部分结果。
 
 CompletionPolicy 不读取用户文本关键词，也不先做 chat/schema/analysis 路由。领域完成条件从 immutable Runtime snapshot 取得 constraint/support tuple；Core 只提供 generic semantic-capability 原语，当前 `dbfox.data` 声明 `query_result` 的 citation 与 bounded-partial 规则。约束只能追加 `MISSING`/`VETO` 要求，不能绕过 pending work、citation ownership 或预算。
+
+完成检查读取本次 Run 的全部已结算 Observation。Prompt 和证据账本使用最近的有界投影。
+回答提交、完成检查与最终结算共用 Artifact Repository 的来源判定，并各自在读取时检查工件可用性。
+结算使用当前 Turn 的回答候选。开始新 Turn 后，早先被拒绝的回答退出交付资格。恢复只从最近
+的耐久 Turn 读取候选。最后一个允许的 Turn 仍可正常完成交付，条件是该轮通过已有完成约束。
+同一工具在同一已绑定资源范围内的后续成功可修复已知失败，其他操作的成功只为自身提供证据。
+未知结果保持未解决。无进展或其他预算边界下，未解决操作只能交付已成功观察且可访问的部分成果，
+可用的部分说明由 Terminalizer 从持久事实生成。若冻结的交付要求必须使用结构化引用，且没有合规的回答，
+运行停止并保留已确认的成果。
 `analysis_review` 是可选的证据覆盖工具，不是完成前置节点。
 
 ## 6. Run 状态机
@@ -233,6 +246,9 @@ flowchart TB
 - L0 可以短暂包含当前工具结果，Turn 结束后释放；
 - L1 保存缺失项、预算、Observation 和 Artifact 引用；
 - L2 只保存 datasource generation 匹配的工作集、未解决问题和已验证事实；
+- Core 只把 Session Memory 的 `working_set` 与 `evidence_references` 投影进上下文
+  （列表有界、总大小上限 4 KiB）；能力私有记忆仍只通过 Context contributor 提供，
+  不复制进这个信封；
 - L3 按需通过工具读取 Schema、索引和可复用 SQL，不全量注入；
 - L4 只保存用户偏好，不保存数据库事实或凭据；
 - 所有持久层都禁止结果行和任意敏感单元格副本。
@@ -240,6 +256,9 @@ flowchart TB
 最近的已完成消息只通过 canonical Session History 注入一次。Session Memory
 不得再次复制最近问题和回答；需要压缩长历史时，应只概括被预算淘汰的旧消息，
 不能与仍在窗口内的原文重复。
+
+压缩策略的当前决定是确定性裁剪 + 证据账本 + 检索工具，不引入 LLM 摘要；
+理由、责任边界与重新评估条件见 [上下文压缩决策](./context-compaction-decision.md)。
 
 结构化 Artifact 上下文统一通过 `ArtifactRepository.available_artifact` 证明可用性：用户选中/附带引用、DLC 近期贡献者输入、上一轮结果索引、工具结果引用与计划步骤引用均遵守同一来源和资源版本边界。选中状态不授予执行权限，已完成但没有可用工件的 Run 不宣称有可复用成果。普通对话历史和恢复摘要仍按原预算保留；详见 [上下文可用性验证](../quality/artifact-context-availability-verification.md)。
 
@@ -286,6 +305,11 @@ flowchart LR
 ## 12. 扩展边界
 
 - 新模型提供商实现统一 Model Adapter，输出规范化 `TurnStreamItem`。
+- Provider 协议是显式边界：Run 创建时的 `provider` 元数据选择 `openai-responses`（默认）或
+  `openai-chat`；未知值在 Run 初始化时以 `MODEL_PROVIDER_UNSUPPORTED` 失败，不做按地址或
+  模型名的隐式回退。工具 schema 由同一冻结物化按 Provider 投影，contract hash 不变。
+- 设置页将所选协议用于连接探测、保存和新 Run。既有协议缺省配置继续使用 Responses。
+  Chat 的推理续轮载荷仅随同一 Run 的原生历史回传，用户可见内容仍来自回答和公开摘要。
 - 新工具通过 Registry 注册完整定义，不向 RunLoop 增加工具名判断。
 - 完成判断只读取模型输出、待结算动作、持久 Observation、Artifact 引用和运行预算，不从用户文本推断任务类型。
 - 新 Artifact 由所属 DLC 定义 payload、关系、Evidence 定位和前端 View；Core `ArtifactRepository` 只持久化并校验通用 envelope、关系和草稿引用，不按 SQL/Result/Visualization 类型投影，也不保存结果副本。
@@ -309,11 +333,16 @@ Run 创建时固定 `RunLimits` 和原始 deadline。恢复后的 worker 继续�
 | Tool Invocation | 默认 48 | Invocation count | 阻止新工具并进入完成判断 |
 | Repair | 默认 4 | `repair_attempt_count` | 不再循环修复 |
 | Provider retry | 默认 2 | `provider_retry_count` | 结束 provider 重试 |
+| 进程恢复 | 默认 3 | `recovery_count` | `AGENT_RECOVERY_EXHAUSTED`，不再自动恢复 |
 | Wall deadline | 默认 900 秒 | Run 创建时间与 deadline | cancel/fail，不接受迟到成功 |
 | Token | AgentDefinition 可选 | input/output/total token ledger | 达限停止新 Turn |
 | Cost | AgentDefinition 可选 | `consumed_cost_usd` | 无明确价格时 fail closed |
 
 Provider adapter 只负责规范化 stream 和 usage；是否重试、是否还有预算由 RunControl 决定，不能由 SDK 内部不可见重试改变工具调用次数。
+
+进程中断与 Provider 失败使用独立账本：残留 `running` Turn 在恢复时只增加
+`recovery_count`，不增加 `provider_retry_count`；恢复次数超限后以稳定错误码终止，
+避免崩溃循环耗尽健康 Run 的 Provider 重试额度。
 
 OpenAI SDK 的 HTTP 失败语义集中在 `engine/llm/providers/openai.py`，Agent adapter、连接测试和
 模型列表共用固定安全分类。HTTP 402 与已知结构化账单限制不可重试；暂时 429 使用既有

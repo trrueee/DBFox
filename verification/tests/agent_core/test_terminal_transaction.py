@@ -217,7 +217,7 @@ def test_answer_evidence_memory_and_terminal_state_commit_together(
         .one()
     )
     memory = json.loads(memory_row.memory_json)
-    assert memory["version"] == 1
+    assert memory["version"] == 3
     assert "recent_runs" not in memory
     assert memory["working_set"]["referenced_artifact_ids"] == [artifact.id]
     stored_reference = memory["stable_context"]["evidence_references"][0]

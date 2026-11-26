@@ -27,3 +27,16 @@ def test_unified_cli_forwards_explicit_local_profile_and_retained_evidence(monke
 def test_scripted_suite_does_not_silently_ignore_local_model_selection(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="currently apply"):
         cli.main(["run", "core.loop.scripted", "--local-model-profile", str(tmp_path / "local-model.json")])
+
+
+@pytest.mark.parametrize(("trials", "scored", "passed", "expected_code"), [
+    (0, 0, 0, 1),
+    (2, 0, 0, 1),
+    (2, 1, 1, 1),
+    (2, 2, 1, 1),
+    (2, 2, 2, 0),
+])
+def test_cli_requires_every_trial_to_pass(monkeypatch, tmp_path, trials, scored, passed, expected_code):
+    summary = {"trials": trials, "scored_trials": scored, "passed_trials": passed}
+    monkeypatch.setattr(cli.EntryPoint, "load", lambda _entry: lambda **_kwargs: summary)
+    assert cli.main(["run", "core.loop.scripted", "--output", str(tmp_path / "report")]) == expected_code
