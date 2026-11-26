@@ -45,8 +45,9 @@ class _EchoTool(BaseTool[_EchoInput, _EchoOutput]):
     )
 
 
+# The Turn snapshot freezes both the strict wire schema and the declared inputs.
 FROZEN_MATERIALIZATION_HASH = (
-    "9ddf75d3398c57a1c3b66a8611e355a07372255b0c1dfa28655108a2676a3354"
+    "9c34e81ecedf3a8cfcfc70f70a3f7fbd5b94607a96ebbcf68f717bef7add5a73"
 )
 
 FROZEN_BUILTIN_NAMES = (
